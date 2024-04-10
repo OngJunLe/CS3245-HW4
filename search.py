@@ -27,15 +27,23 @@ def run_search(dict_file, postings_file, queries_file, results_file):
         content = f.read().splitlines()  
         query = content.pop(0)
         relevant_docs = content
+    
 
     qp = QueryProcessor(dict_file, postings_file)
-
+    
     result_strings = []
-    result_strings.append(qp.process_query(query, number_results=10))
-    
+    result = qp.process_query(query, number_results=10).split(" ")
+    for doc in relevant_docs:
+        if doc in result:
+            #sort relevant docs by order in result
+            result_strings.append((result.index(doc), doc))
+            result_strings = sorted(result_strings)
+            results_string = [tuple[1] for tuple in results_string]
+            result.remove(doc)
+    result_strings.extend(result)
+
     with open(results_file, 'w') as f:
-        f.write('\n'.join(result_strings))
-    
+        f.write(' '.join(result_strings))
     print(f'output written to {results_file}')
 
 run_search("dictionary.txt", "postings.txt", "q1.txt", "output.txt")
