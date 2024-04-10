@@ -25,6 +25,13 @@ TOTAL_DOCUMENTS_KEY = -200
 def usage():
     print("usage: " + sys.argv[0] + " -i directory-of-documents -d temp_postings-file -p postings-file")
 
+
+def retrieve_posting(key, dictionary, postings_file):
+    offset, to_read = dictionary[key]
+    postings_file.seek(offset)
+    posting_list = pickle.loads(postings_file.read(to_read))
+    return posting_list
+
 def build_index(in_dir, out_dict, out_postings):
     """
     build index from documents stored in the input directory,
@@ -38,8 +45,13 @@ def build_index(in_dir, out_dict, out_postings):
     doc_length_dictionary = {}
     stemmer = nltk.stem.PorterStemmer()
     total_documents = 0
+    postings = {}
     maxInt = sys.maxsize
     
+    # Creates out_postings file so that it can be read later
+    file = open(out_postings, "wb")
+    file.close()
+
     # Code for field larger than field limit error - edit to suit needs later 
     while True: 
         # decrease the maxInt value by factor 10 
@@ -53,7 +65,8 @@ def build_index(in_dir, out_dict, out_postings):
     with open(in_dir, encoding="utf-8") as f:
         csv_reader = csv.reader(f, delimiter=",")
         next(csv_reader) # exclude first line of column headers from indexing
-        while True: #test while true loop for whole dataset
+        #for i in range(10): #test while true loop for whole dataset
+        while True:
             try:    
                 total_documents += 1
                 line = next(csv_reader) #splits into docid, title, content? - see if need the other stuff
@@ -71,27 +84,55 @@ def build_index(in_dir, out_dict, out_postings):
                     sum += (1 + math.log10(word_count[word]))**2
                 document_length = sum**0.5
                 doc_length_dictionary[id] = document_length
-                print(total_documents)
+
+                memory = sys.getsizeof(temp_postings)
+                if (memory < 2000000): 
+                    continue
+                # Merging if size of postings dictionary exceeds 2MB
+                temp_postings_keys = temp_postings.keys() 
+                with open(out_postings, "rb") as input:
+                    for key in temp_postings_keys:
+                        if key in term_dictionary: 
+                            posting_list = retrieve_posting(key, term_dictionary, input)
+                            to_add = list(set(temp_postings[key] + posting_list))
+                            postings[key] = to_add 
+                            term_dictionary.pop(key)
+                        else:
+                            postings[key] = temp_postings[key] 
+                    for key in term_dictionary:  # Adding any remaining terms in dictionary to postings
+                        postings[key] = retrieve_posting(key, term_dictionary, input)
+                temp_postings_keys = []
+                temp_postings = defaultdict(list) 
+                term_dictionary = {} 
+                sorted_keys = sorted(list(postings.keys()))   
+                current_offset = 0 
+                with open(out_postings, "wb") as output:
+                    for key in sorted_keys:
+                        ll_binary = pickle.dumps(postings[key])
+                        no_of_bytes = len(ll_binary)
+                        term_dictionary[key] = (current_offset, no_of_bytes)
+                        output.write(ll_binary)
+                        current_offset += len(ll_binary)
+                postings = {}
+
             except StopIteration:
                 print ("end of file")
                 break        
-    '''
-    for fileid in file_ids: 
-        words = word_tokenize(reuters.raw(fileid))
-        words = [stemmer.stem(word).lower() for word in words if word not in string.punctuation] 
-        word_count = Counter(words)
-        id = int(fileid.split("/")[-1])
-        # Create tuples of (docID, log term freqeuncy) and appending to temp_postings
-        for word in word_count:
-            temp_postings[word].append((id, 1 + math.log10(word_count[word])))
-        # Document vector length calculation 
-        sum = 0
-        for word in word_count:
-            sum += (1 + math.log10(word_count[word]))**2
-        document_length = sum**0.5
-        doc_length_dictionary[id] = document_length
-    '''
-    sorted_keys = sorted(list(temp_postings.keys()))   
+
+    # Acount for any postings lists remaining in temp_postings at end of indexing due to memory limit not being hit
+    postings = temp_postings
+    temp_postings = {}
+    with open(out_postings, "rb") as input:
+        for key in term_dictionary:
+            posting_list = retrieve_posting(key, term_dictionary, input)
+            if key in postings:    
+                to_add = list(set(postings[key] + posting_list))
+                postings[key] = to_add
+            else:
+                postings[key] = posting_list
+    term_dictionary = {} 
+            
+    sorted_keys = sorted(list(postings.keys()))   
     # Storing byte offset in dictionary so that postings lists can be retrieved without reading entire file
     current_offset = 0 
     with open(out_postings, "wb") as output:
@@ -102,7 +143,7 @@ def build_index(in_dir, out_dict, out_postings):
         output.write(dictionary_binary)
         current_offset += no_of_bytes
         for key in sorted_keys:
-            to_add = sorted(temp_postings[key])
+            to_add = sorted(postings[key])
             to_add_binary = pickle.dumps(to_add)
             no_of_bytes = len(to_add_binary)
             term_dictionary[key] = (current_offset, no_of_bytes)
@@ -118,7 +159,9 @@ def build_index(in_dir, out_dict, out_postings):
     print ("indexing over")
 
 
-build_index("dataset.csv","dictionary.txt","postings.txt")
+
+build_index("dataset.csv", "dictionary.txt", "postings.txt")
+
 '''
 with open("dictionary.txt", "rb") as input:
     dictionary = pickle.loads(input.read())
@@ -154,8 +197,8 @@ if (__name__ == "__main__"):
         sys.exit(2)
 
     build_index(input_directory, output_file_dictionary, output_file_postings)   
-'''
 
+'''
   
 
 
