@@ -36,7 +36,7 @@ def tokenize(input, stemmer, stopwords):
     tokens = word_tokenize(input)
     first = tokens.pop(0)
     first = first.split("D0C_ID")
-    id = first[0]
+    id = int(first[0])
 
     #Retain position of original word 
     tokens.insert(0, first[1])
@@ -50,7 +50,7 @@ def tokenize(input, stemmer, stopwords):
     #Stemming
     tokens = [stemmer.stem(word) for word in tokens] 
 
-    for i in range(len(tokens) - 2):
+    for i in range(len(tokens) - 1):
         bigram = (tokens[i], tokens[i + 1])
         bigram_list.append(bigram) 
     bigram_list.extend(tokens)  
@@ -122,9 +122,16 @@ def build_index(in_dir, out_dict, out_postings):
         output.write(dictionary_binary)
     
     print ("indexing over")
-  
-
 '''
+with open("dictionary.txt", "rb") as input:
+    dictionary = pickle.loads(input.read())
+    offset, to_read = dictionary[("phone", "call")] 
+with open("postings.txt", "rb") as input:
+    input.seek(offset)
+    postings = pickle.loads(input.read(to_read))
+    print(postings) 
+
+
 with open("dictionary.txt", "rb") as input:
     dictionary = pickle.loads(input.read())
     offset, to_read = dictionary["court"] 
