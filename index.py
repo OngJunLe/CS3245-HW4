@@ -30,6 +30,9 @@ def usage():
     print("usage: " + sys.argv[0] + " -i directory-of-documents -d temp_postings-file -p postings-file")
 
 def tokenize(query, stemmer, stopwords):
+    bigram_list = []
+    temp = []
+
     tokens = word_tokenize(query)
 
     #Remove tokens with punctuation 
@@ -56,7 +59,6 @@ def build_index(in_dir, out_dict, out_postings):
     doc_length_dictionary = {}
     stemmer = nltk.stem.PorterStemmer()
     total_documents = 0
-    maxInt = sys.maxsize
     bigram_list = []
     tokens = []
 
@@ -65,34 +67,40 @@ def build_index(in_dir, out_dict, out_postings):
         df = pd.read_csv(f, sep=',', header=0, quotechar='"', quoting=csv.QUOTE_ALL)
         bag = db.from_sequence(df['content'])
         token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute() 
+
         for token_list in token_counter_list:
              for word in token_list:
                   tokens.append(word)
         for i in range(len(tokens) - 2):
                     bigram = (tokens[i], tokens[i + 1])
-                    bigram_list.append(bigram)
+                    bigram_list.append(bigram) 
+        bigram_list.extend(tokens)     
         bigram_list = Counter(bigram_list)
+ 
         # Create tuples of (docID, log term freqeuncy) and appending to temp_postings
         for word in bigram_list:
             temp_postings[word].append((id, 1 + math.log10(bigram_list[word])))
-        # Document vector length calculation 
+        '''
+        # Document vector length calculation - removed normalisation for now
         sum = 0
         for word in bigram_list:
             sum += (1 + math.log10(bigram_list[word]))**2
         document_length = sum**0.5
         doc_length_dictionary[id] = document_length
-    sorted_keys = sorted(list(temp_postings.keys()))   
-    print(sorted_keys)
+        '''
+    #sorted_keys = sorted(list(temp_postings.keys())) -- do the keys need to be sorted for some reason? cant rmb, double check since cant sort tuples and str
     # Storing byte offset in dictionary so that postings lists can be retrieved without reading entire file
     current_offset = 0 
     with open(out_postings, "wb") as output:
-        # Add document length dictionary
+        '''
+        # Add document length dictionary - removed normalisation for now 
         dictionary_binary = pickle.dumps(doc_length_dictionary)
         no_of_bytes = len(dictionary_binary)
         term_dictionary[DOCUMENT_LENGTH_KEY] = (current_offset, no_of_bytes)
         output.write(dictionary_binary)
         current_offset += no_of_bytes
-        for key in sorted_keys:
+        '''
+        for key in temp_postings.keys():
             to_add = sorted(temp_postings[key])
             to_add_binary = pickle.dumps(to_add)
             no_of_bytes = len(to_add_binary)
@@ -107,8 +115,7 @@ def build_index(in_dir, out_dict, out_postings):
         output.write(dictionary_binary)
     
     print ("indexing over")
-
-#build_index("dataset.csv", "dictionary.txt", "postings.txt")   
+  
 
 '''
 build_index("dataset.csv", "dictionary.txt", "postings.txt")  
@@ -148,7 +155,7 @@ if (__name__ == "__main__"):
 
     build_index(input_directory, output_file_dictionary, output_file_postings)   
     '''
-    build_index("test.csv", "dictionary.txt", "postings.txt")  
+    build_index("dataset.csv", "dictionary.txt", "postings.txt")  
 
 
   
