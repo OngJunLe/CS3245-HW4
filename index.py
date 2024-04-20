@@ -17,6 +17,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from collections import Counter
 from collections import defaultdict
+from pandas import Series
 
 
 # Format of term dictionary {term: (offset, no_bytes), ...}
@@ -29,11 +30,16 @@ TOTAL_DOCUMENTS_KEY = -200
 def usage():
     print("usage: " + sys.argv[0] + " -i directory-of-documents -d temp_postings-file -p postings-file")
 
-def tokenize(query, stemmer, stopwords):
+def tokenize(input, stemmer, stopwords):
+    temp_postings = defaultdict(list) 
     bigram_list = []
-    temp = []
+    tokens = word_tokenize(input)
+    first = tokens.pop(0)
+    first = first.split("D0C_ID")
+    id = first[0]
 
-    tokens = word_tokenize(query)
+    #Retain position of original word 
+    tokens.insert(0, first[1])
 
     #Remove tokens with punctuation 
     tokens = [word for word in tokens if not any(char in string.punctuation for char in word)]
@@ -44,7 +50,16 @@ def tokenize(query, stemmer, stopwords):
     #Stemming
     tokens = [stemmer.stem(word) for word in tokens] 
 
-    return tokens
+    for i in range(len(tokens) - 2):
+        bigram = (tokens[i], tokens[i + 1])
+        bigram_list.append(bigram) 
+    bigram_list.extend(tokens)  
+    bigram_list = Counter(bigram_list)
+
+    #Create tuples of (docID, log term freqeuncy) and appending to temp_postings
+    for word in bigram_list:
+            temp_postings[word].append((id, 1 + math.log10(bigram_list[word])))
+    return temp_postings
 
 def build_index(in_dir, out_dict, out_postings):
     """
@@ -56,7 +71,6 @@ def build_index(in_dir, out_dict, out_postings):
     # Pls implement your code in below
     temp_postings = defaultdict(list) 
     term_dictionary = {}
-    doc_length_dictionary = {}
     stemmer = nltk.stem.PorterStemmer()
     total_documents = 0
     bigram_list = []
@@ -65,21 +79,14 @@ def build_index(in_dir, out_dict, out_postings):
     stoplist = set(stopwords.words('english'))
     with open(in_dir, encoding="utf-8") as f:
         df = pd.read_csv(f, sep=',', header=0, quotechar='"', quoting=csv.QUOTE_ALL)
-        bag = db.from_sequence(df['content'])
+        total_documents = len(df.index)
+        bag = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['content'])
         token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute() 
-
-        for token_list in token_counter_list:
-             for word in token_list:
-                  tokens.append(word)
-        for i in range(len(tokens) - 2):
-                    bigram = (tokens[i], tokens[i + 1])
-                    bigram_list.append(bigram) 
-        bigram_list.extend(tokens)     
-        bigram_list = Counter(bigram_list)
- 
-        # Create tuples of (docID, log term freqeuncy) and appending to temp_postings
-        for word in bigram_list:
-            temp_postings[word].append((id, 1 + math.log10(bigram_list[word])))
+        for dictionary in token_counter_list:
+            for key in dictionary:
+                #list of tuples instead of list of list of tuples
+                temp_postings[key].append(dictionary[key][0])
+            dictionary.clear()  
         '''
         # Document vector length calculation - removed normalisation for now
         sum = 0
@@ -118,7 +125,6 @@ def build_index(in_dir, out_dict, out_postings):
   
 
 '''
-build_index("dataset.csv", "dictionary.txt", "postings.txt")  
 with open("dictionary.txt", "rb") as input:
     dictionary = pickle.loads(input.read())
     offset, to_read = dictionary["court"] 
@@ -127,7 +133,6 @@ with open("postings.txt", "rb") as input:
     postings = pickle.loads(input.read(to_read))
     print(postings)
 '''
-
 
 # So this doesn't run when this file is imported in other scripts
 if (__name__ == "__main__"): 
@@ -155,7 +160,8 @@ if (__name__ == "__main__"):
 
     build_index(input_directory, output_file_dictionary, output_file_postings)   
     '''
-    build_index("dataset.csv", "dictionary.txt", "postings.txt")  
+    #build_index("dataset.csv", "dictionary.txt", "postings.txt") 
+    #build_index("test.csv", "test_dictionary.txt", "test_postings.txt") 
 
 
   
