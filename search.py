@@ -37,11 +37,10 @@ def run_search(dict_file, postings_file, queries_file, results_file):
         if doc in result:
             #sort relevant docs by order in result
             result_strings.append((result.index(doc), doc))
-            result_strings = sorted(result_strings)
-            results_string = [tuple[1] for tuple in results_string]
             result.remove(doc)
+        result_strings = sorted(result_strings)
+        result_strings = [tuple[1] for tuple in result_strings]
     result_strings.extend(result)
-
     with open(results_file, 'w') as f:
         f.write(' '.join(result_strings))
     print(f'output written to {results_file}')
