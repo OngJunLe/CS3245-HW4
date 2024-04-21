@@ -135,6 +135,8 @@ def build_index(in_dir, out_dict, out_postings):
     print ("indexing over")
 
 
+
+
 '''
 test = ["1", "2", "test"]
 test = [int(word) if word.isnumeric() else word for word in test]
