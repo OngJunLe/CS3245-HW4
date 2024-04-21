@@ -20,6 +20,7 @@ from collections import defaultdict
 from pandas import Series
 
 
+
 # Format of term dictionary {term: (offset, no_bytes), ...}
 # Format of postings [(docID, log term frequency), ...]
 
@@ -30,7 +31,15 @@ TOTAL_DOCUMENTS_KEY = -200
 def usage():
     print("usage: " + sys.argv[0] + " -i directory-of-documents -d temp_postings-file -p postings-file")
 
-def tokenize(input, stemmer, stopwords):
+def is_int(word):
+    try:
+        int(word)
+    except ValueError:
+        return False
+    else:
+        return True
+    
+def tokenize(input, stemmer,stopwords):
     temp_postings = defaultdict(list) 
     bigram_list = []
     tokens = word_tokenize(input)
@@ -45,10 +54,13 @@ def tokenize(input, stemmer, stopwords):
     tokens = [word for word in tokens if not any(char in string.punctuation for char in word)]
 
     #Remove stop words: common words that do not contribute to meaning of text
-    tokens = [word for word in tokens if word.lower not in stopwords]
+    tokens = [word for word in tokens if word.lower() not in stopwords]
 
     #Stemming
     tokens = [stemmer.stem(word) for word in tokens] 
+
+    #Convert any integers to save memory 
+    #tokens = [int(word) if is_int(word) else word for word in tokens]
 
     for i in range(len(tokens) - 1):
         bigram = (tokens[i], tokens[i + 1])
@@ -73,8 +85,6 @@ def build_index(in_dir, out_dict, out_postings):
     term_dictionary = {}
     stemmer = nltk.stem.PorterStemmer()
     total_documents = 0
-    bigram_list = []
-    tokens = []
 
     stoplist = set(stopwords.words('english'))
     with open(in_dir, encoding="utf-8") as f:
@@ -82,6 +92,7 @@ def build_index(in_dir, out_dict, out_postings):
         total_documents = len(df.index)
         bag = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['content'])
         token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute() 
+        #Could prob just add list of doc_IDs here and append to each token_list from bag.map too - check if more efficient 
         for dictionary in token_counter_list:
             for key in dictionary:
                 #list of tuples instead of list of list of tuples
@@ -122,7 +133,13 @@ def build_index(in_dir, out_dict, out_postings):
         output.write(dictionary_binary)
     
     print ("indexing over")
+
+
 '''
+test = ["1", "2", "test"]
+test = [int(word) if word.isnumeric() else word for word in test]
+print(test)
+
 with open("dictionary.txt", "rb") as input:
     dictionary = pickle.loads(input.read())
     offset, to_read = dictionary[("phone", "call")] 

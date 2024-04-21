@@ -1,5 +1,6 @@
 import pickle
 import heapq
+import re
 from collections import defaultdict
 from math import log
 from index import DOCUMENT_LENGTH_KEY, TOTAL_DOCUMENTS_KEY
@@ -8,6 +9,9 @@ from string import punctuation
 from nltk.corpus import wordnet as wn
 
 class QueryProcessor:
+    OPERATOR_AND = 2
+    regex_pattern = r'\bAND\b|\bOR\b|\bNOT\b|[\(\)]|[^\s()]+'
+    OPERATOR_LIST = [OPERATOR_AND]
 
     def __init__(self, dictionary_file, postings_file):
         with open(dictionary_file, 'rb') as f:
@@ -29,7 +33,6 @@ class QueryProcessor:
     def process_query(self, query, number_results=10):
         bigrams = []
         query_terms = []
-        unique_terms = []
         scores = defaultdict(float)
         
 
@@ -38,14 +41,15 @@ class QueryProcessor:
         
         initial_terms = [term for term in initial_terms if term not in punctuation]
 
-        
+        '''
         # remove duplicate terms and stem the terms - cant use set() since need to preserve order
+        # dont need to remove though i think?
         for term in initial_terms:
             if term not in unique_terms:
                 query_terms.append(term)
                 unique_terms.append(term)
             
-        '''
+        
         # add relevant query terms with Wordnet
         for query in query_terms:
             query = wn.synsets(query)[0]
@@ -123,5 +127,150 @@ class QueryProcessor:
 
         return postings_list
     
+    def process_query_boolean(self, query):
+        bigrams = []
+        try:
+            # check if this lines up with nltk word_tokenize 
+            tokens = list(self.tokenize_query(query))
 
+            # check for any invalid tokens
+            invalid_tokens = []
+            for t in tokens:
+                if t in self.dictionary:
+                    if "&" in t or "|" in t or "~" in t:
+                        invalid_tokens.append(t)
+                else:
+                    if t not in self.OPERATOR_LIST:
+                        invalid_tokens.append(t)
 
+            if len(invalid_tokens) > 0:
+                return "invalid token(s): " + ", ".join(invalid_tokens)
+            '''
+            # convert terms to bigrams - need to account for operators 
+            # double check logic for queries with 1-2 words
+            if (len(tokens) != 0):
+                for i in range(len(tokens) - 1):
+                    if (tokens[i + 1] == self.OPERATOR_AND):
+                        bigrams.append(self.OPERATOR_AND)
+                    elif (tokens[i] == self.OPERATOR_AND):
+                        continue
+                    else:
+                        bigram = (tokens[i], tokens[i + 1])
+                        bigrams.append(bigram)
+                tokens = bigrams
+            
+            #tokens = self.optimise_query(tokens) -- add back evaluating shorter postings lists first
+            '''
+            if len(tokens) == 0: return ""
+
+            postfix = self.convert_to_postfix(tokens)
+
+            # add sorting results by idf 
+            result = self.evaluate_postfix(postfix)
+            
+        except Exception as e:
+            return "ERROR" + str(e)
+        
+        return str(result)
+        
+        
+    def tokenize_query(self, query):
+        for token in re.findall(self.regex_pattern, query):
+            if token == "AND":
+                yield self.OPERATOR_AND
+            else:
+                yield self.stemmer.stem(token).lower()
+
+    # use shunting-yard algorithm to process query into postfix notation
+    def convert_to_postfix(self, tokens):
+        output_queue = []
+        operator_stack = []
+
+        for token in tokens:
+            if token in self.OPERATOR_LIST:
+                while (operator_stack and operator_stack[-1] >= token): # OR AND NOT will never be greater than parenthesis, omit check for parenthesis
+                    output_queue.append(operator_stack.pop())
+                operator_stack.append(token)
+            else: # token is a term
+                output_queue.append(token)
+
+        while operator_stack:
+            output_queue.append(operator_stack.pop())
+
+        return output_queue
+    
+    
+    def evaluate_postfix(self, postfix):
+        eval_stack = []
+        for token in postfix:
+            if token in self.OPERATOR_LIST:
+                eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
+            else:
+                eval_stack.append(self.fetch_postings_list(token))
+        return eval_stack[0]
+
+    #need to add returning results by idf
+    def and_operation(self, postings1, postings2):
+        #node1 = postings1.head
+        #node2 = postings2.head
+        current_index_1 = 0
+        current_index_2 = 0
+        skip_1 = int(len(postings1) ** 0.5)
+        skip_2 = int(len(postings2) ** 0.5)
+        results_list = []
+        # to keep track of the previous intersecting node in postings1
+        # because postings1 will be modified in place
+        #prev1 = None
+        '''
+        while node1 is not None and node2 is not None:
+            if node1.data == node2.data:
+                node1.skip = None # remove skip pointers
+                node2 = node2.next
+                prev1 = node1
+                node1 = node1.next
+            elif node1.data < node2.data:
+                if node1.skip and node1.skip.data <= node2.data:
+                    while node1.skip and node1.skip.data <= node2.data:
+                        node1 = node1.skip
+                # first intersection node should be made the new head
+                if prev1 is None:
+                    postings1.head = node1.next # remove node1 from postings1
+                else:
+                    prev1.next = node1.next # remove node1 from postings1
+                node1 = node1.next
+            else:
+                if node2.skip and node2.skip.data <= node1.data:
+                    while node2.skip and node2.skip.data <= node1.data:
+                        node2 = node2.skip
+                node2 = node2.next
+            '''
+        while current_index_1 < len(postings1) and current_index_2 < len(postings2):
+            if (postings1[current_index_1] == postings2[current_index_2]):
+                results_list.append(postings1[current_index_1][0])
+                current_index_1 += 1
+                current_index_2 += 1
+            elif (postings1[current_index_1][0] < postings2[current_index_2][0]):
+                if (current_index_1 + skip_1 < len(postings1)):
+                    if (postings1[current_index_1 + skip_1][0] <= postings2[current_index_2][0]):
+                        current_index_1 += skip_1
+                    else:
+                        current_index_1 += 1
+                else:
+                    current_index_1 += 1
+            else:
+                if (current_index_2 + skip_2 < len(postings2)):
+                    if (postings2[current_index_2 + skip_2][0] <= postings1[current_index_1][0]):
+                        current_index_2 += skip_2
+                    else:
+                       current_index_2 += 1
+                else:
+                    current_index_2 += 1
+        return results_list
+
+'''
+qp = QueryProcessor("dictionary.txt", "postings.txt")
+query = "phone AND call"
+test1 = [(30, "thirty"), (40, "fourty"), (50, "fifty")]
+test2 = [(20, "twenty"), (40, "fourty"), (60, "sixty")]
+print(qp.process_query_boolean(query))
+'''
