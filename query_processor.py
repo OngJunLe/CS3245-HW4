@@ -135,12 +135,17 @@ class QueryProcessor:
         bigrams = []
         try: 
             tokens = word_tokenize(query)
-            
+
+            #remove punctuation 
+            tokens = [term for term in tokens if term not in punctuation]
 
             #remove quotation marks - double check why theres 2 unique quotation marks strings
             tokens = [term for term in tokens if term != "``"]
             tokens = [term for term in tokens if term != "''"]
             tokens = [2 if term == "AND" else term for term in tokens]
+            
+            #stem
+            tokens = [self.stemmer.stem(term.lower()) if term != self.OPERATOR_AND else term for term in tokens]
 
             # check for any invalid tokens
             invalid_tokens = []
@@ -158,6 +163,8 @@ class QueryProcessor:
             # convert terms to bigrams 
             # double check logic for queries with 1-2 words - prob need to account for trivial expressions e.g. phrase AND nothing
             # bigram logic currently evaluates "phone AND 'high court date'" into phone AND high court AND date
+
+            
             if (len(tokens) > 2):
                 for i in range(0, len(tokens) - 1, 2):
                     if (tokens[i + 1] == self.OPERATOR_AND):
@@ -183,22 +190,21 @@ class QueryProcessor:
                 if (len(tokens)%2 != 0):
                     bigrams.append(tokens[len(tokens) - 1])
                 tokens = bigrams
-            '''
+            
             #tokens = self.optimise_query(tokens) -- add back evaluating shorter postings lists first
             #boolean AND query has to have at least 3 tokens including the AND
             if len(tokens) < 3: 
                 return ""
-
+            
             postfix = self.convert_to_postfix(tokens)
-
             # add sorting results by idf 
             result = self.evaluate_postfix(postfix)
-            '''
+            
         except Exception as e:
             return "ERROR" + str(e)
         
-        #return str(result)
-        return tokens
+        return str(result)
+
 
         
     '''
@@ -282,7 +288,7 @@ class QueryProcessor:
 
 '''
 qp = QueryProcessor("dictionary.txt", "postings.txt")
-query = '"high court date" AND "phone call"'
+query = 'court AND phone call'
 
 test1 = [(30, 30), (40, 40), (50, 50), (70, 70)] 
 test2 = [(30, 20), (40, 40), (60, 60,), (70, 70)]
