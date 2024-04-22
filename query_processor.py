@@ -155,25 +155,35 @@ class QueryProcessor:
             if len(invalid_tokens) > 0:
                 return "invalid token(s): " + ", ".join(invalid_tokens)
             
-            # convert terms to bigrams - need to account for operators 
+            # convert terms to bigrams 
             # double check logic for queries with 1-2 words - prob need to account for trivial expressions e.g. phrase AND nothing
-            # bigram logic currently evaluates "quiet phone AND call", without doing "quiet phone AND phone call" - see if makes sense
+            # bigram logic currently evaluates "phone AND 'high court date'" into phone AND high court AND date
             if (len(tokens) > 2):
-                for i in range(len(tokens) - 1):
+                for i in range(0, len(tokens) - 1, 2):
                     if (tokens[i + 1] == self.OPERATOR_AND):
+                        bigrams.append(tokens[i])
                         bigrams.append(self.OPERATOR_AND)
                     elif (tokens[i] == self.OPERATOR_AND):
-                        if (i + 2 == len(tokens)):
-                            bigrams.append(tokens[i + 1])
-                        else:
-                            continue
+                        bigrams.append(self.OPERATOR_AND)
+                        bigrams.append(tokens[i + 1])
+                    #bigram code - check for trigrams here
                     else:
                         bigram = (tokens[i], tokens[i + 1])
                         # remove bigram if not in dictionary to avoid KeyError
                         if bigram in self.dictionary:
-                            bigrams.append(bigram)
+                            # prevent out of bounds error
+                            if (i != 0 and tokens[i - 1] != self.OPERATOR_AND):
+                                bigrams.append(self.OPERATOR_AND)
+                                bigrams.append(bigram)
+                            elif ((i + 1) != len(tokens) - 1 and tokens[i + 2] != self.OPERATOR_AND):
+                                bigrams.append(bigram)
+                                bigrams.append(self.OPERATOR_AND)
+                            else:
+                                bigrams.append(bigram)       
+                if (len(tokens)%2 != 0):
+                    bigrams.append(tokens[len(tokens) - 1])
                 tokens = bigrams
-            
+            '''
             #tokens = self.optimise_query(tokens) -- add back evaluating shorter postings lists first
             #boolean AND query has to have at least 3 tokens including the AND
             if len(tokens) < 3: 
@@ -183,11 +193,12 @@ class QueryProcessor:
 
             # add sorting results by idf 
             result = self.evaluate_postfix(postfix)
-            
+            '''
         except Exception as e:
             return "ERROR" + str(e)
         
-        return str(result)
+        #return str(result)
+        return tokens
 
         
     '''
@@ -271,7 +282,7 @@ class QueryProcessor:
 
 '''
 qp = QueryProcessor("dictionary.txt", "postings.txt")
-query = '"high court" AND "phone call"'
+query = '"high court date" AND "phone call"'
 
 test1 = [(30, 30), (40, 40), (50, 50), (70, 70)] 
 test2 = [(30, 20), (40, 40), (60, 60,), (70, 70)]
