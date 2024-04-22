@@ -131,14 +131,14 @@ def build_index(in_dir, out_dict, out_postings):
     # Storing byte offset in dictionary so that postings lists can be retrieved without reading entire file
     current_offset = 0 
     with open(out_postings, "wb") as output:
-
+        '''
         # Add document length dictionary - removed normalisation for now 
         dictionary_binary = pickle.dumps(doc_length_dictionary)
         no_of_bytes = len(dictionary_binary)
         term_dictionary[DOCUMENT_LENGTH_KEY] = (current_offset, no_of_bytes)
         output.write(dictionary_binary)
         current_offset += no_of_bytes
-
+        '''
         for key in temp_postings.keys():
             to_add = sorted(temp_postings[key])
             to_add_binary = pickle.dumps(to_add)
