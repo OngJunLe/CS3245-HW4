@@ -31,6 +31,20 @@ def count_csv(file_path):
 
         print(row_count)
 
+def check_lines(file_path):
+    lines = list(range(960,980))
+    with open(file_path, 'r', newline='') as f:
+        for i, row in enumerate(f.readlines()):
+            # print(repr(row))
+            # if i>250: break
+            if i in lines:
+                print(repr(row))
+                if i == lines[-1]:
+                    break
+        # reader = csv.reader(f)
+        # for row in reader:
+        #     print(row)
+
 def count_words(file_path):
     print('reading dataset...')
 
@@ -162,7 +176,8 @@ if __name__ == "__main__":
     # read_csv('data/dataset.csv', 100)
     # set_max_size()
     # count_words('data/dataset.csv')
-    test_pairwise()
+    # test_pairwise()
+    check_lines('data/dataset.csv')
 
     
                 
