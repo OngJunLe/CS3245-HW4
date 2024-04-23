@@ -183,6 +183,7 @@ with open("postings.txt", "rb") as input:
     input.seek(offset)
     postings = pickle.loads(input.read(to_read))
     print(postings)
+'''
 
 # So this doesn't run when this file is imported in other scripts
 if (__name__ == "__main__"): 
@@ -212,7 +213,7 @@ if (__name__ == "__main__"):
     
     #build_index("dataset.csv", "dictionary.txt", "postings.txt") 
     #build_index("test.csv", "test_dictionary.txt", "test_postings.txt") 
-'''
+
 
   
 

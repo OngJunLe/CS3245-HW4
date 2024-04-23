@@ -10,5 +10,5 @@ conda activate cs3245
 free -m
 
 #python index.py
-python -u index_plsa.py
+python -u index.py -i 'data/dataset.csv' -d 'data/dictionary' -p 'data/postings'
 #python query_processor.py
