@@ -275,7 +275,9 @@ class QueryProcessor:
                 # heuristic: assume log freq weight of term t in query = 1
                 docu_freq = len(postings1)
                 weight_term = log_N - log(docu_freq)
-                to_add = (to_add[0], to_add[1] * weight_term)
+
+                # add tf-idf for both terms together
+                to_add = (to_add[0], (to_add[1] + postings2[current_index_2][1]) * weight_term)
 
                 results_list.append(to_add)
                 current_index_1 += 1
@@ -304,12 +306,12 @@ class QueryProcessor:
 
 
 
-'''
+
 qp = QueryProcessor("dictionary.txt", "postings.txt")
-query = 'quiet phone call'
+query = 'phone AND call'
 
 test1 = [(30, 30), (40, 40), (50, 50), (70, 70)] 
 test2 = [(30, 20), (40, 40), (60, 60,), (70, 70)]
 test3 = [("second", 50), ("first", 30), ("third", 70)]
 print(qp.process_query(query))
-'''
+
