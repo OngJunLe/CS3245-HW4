@@ -27,26 +27,35 @@ def run_search(dict_file, postings_file, queries_file, results_file):
         content = f.read().splitlines()  
         query = content.pop(0)
         relevant_docs = content
-    
+
+
 
     qp = QueryProcessor(dict_file, postings_file)
     
     result_strings = []
-    result = qp.process_query(query, number_results=10).split(" ")
+
+    if ("AND" in query):
+        result = qp.process_query_boolean(query)
+
+    else:
+        result = qp.process_query(query, number_results=10).split(" ")
+    
     for doc in relevant_docs:
         if doc in result:
             #sort relevant docs by order in result
             result_strings.append((result.index(doc), doc))
-            result_strings = sorted(result_strings)
-            results_string = [tuple[1] for tuple in results_string]
             result.remove(doc)
+        result_strings = sorted(result_strings)
+        result_strings = [tuple[1] for tuple in result_strings]
     result_strings.extend(result)
-
+    
+    # boolean result string somehow not getting joined , double check
     with open(results_file, 'w') as f:
         f.write(' '.join(result_strings))
     print(f'output written to {results_file}')
 
 run_search("dictionary.txt", "postings.txt", "q1.txt", "output.txt")
+
 
 '''
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None
