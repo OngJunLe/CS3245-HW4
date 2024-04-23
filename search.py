@@ -54,7 +54,7 @@ def run_search(dict_file, postings_file, queries_file, results_file):
         f.write(' '.join(result_strings))
     print(f'output written to {results_file}')
 
-#run_search("dictionary.txt", "postings.txt", "q3.txt", "output.txt")
+run_search("dictionary.txt", "postings.txt", "q1.txt", "output.txt")
 
 
 '''

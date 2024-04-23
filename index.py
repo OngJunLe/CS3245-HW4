@@ -73,6 +73,27 @@ def tokenize(input, stemmer,stopwords):
             temp_postings[word].append((id, 1 + math.log10(bigram_list[word])))
     return temp_postings
 
+def process_legal_dict(dictionary, stemmer, stoplist):
+    legal_dict = {}
+    with open(dictionary, "r", encoding="utf-8") as input:
+        while True:
+            line = input.readline()
+            if ("LASTLINE" in line):
+                break
+            if (len(line) > 2 and "ASSOCIATED CONCEPTS" not in line and "FOREIGN PHRASES" not in line and "Generally" not in line and "Specifically" not in line):
+                line = line.split(", ")
+                term = stemmer.stem(line.pop(0).lower())
+                del line[0]
+                tokens = [word for word in line if len(word.split(" ")) < 3]
+                # remove stopwords and stem
+                tokens = [word for word in tokens if word.lower() not in stoplist]
+                tokens = [stemmer.stem(word) for word in tokens]
+                legal_dict[term] = tokens
+    with open("binary_thesaurus.txt", "wb") as output:
+        legal_dictionary_binary = pickle.dumps(legal_dict)
+        output.write(legal_dictionary_binary)
+    
+
 def build_index(in_dir, out_dict, out_postings):
     """
     build index from documents stored in the input directory,
@@ -132,7 +153,11 @@ def build_index(in_dir, out_dict, out_postings):
     with open(out_dict, "wb") as output:
         output.write(dictionary_binary)
     
+    # Not sure if should have seperate code file for this 
+    process_legal_dict("burtons_thesaurus.txt", stemmer, stoplist)
+
     print ("indexing over")
+
 
 
 
@@ -158,11 +183,10 @@ with open("postings.txt", "rb") as input:
     input.seek(offset)
     postings = pickle.loads(input.read(to_read))
     print(postings)
-'''
 
 # So this doesn't run when this file is imported in other scripts
 if (__name__ == "__main__"): 
-    '''
+
     input_directory = output_file_dictionary = output_file_postings = None
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'i:d:p:')
@@ -185,10 +209,10 @@ if (__name__ == "__main__"):
         sys.exit(2)
 
     build_index(input_directory, output_file_dictionary, output_file_postings)   
-    '''
+    
     #build_index("dataset.csv", "dictionary.txt", "postings.txt") 
     #build_index("test.csv", "test_dictionary.txt", "test_postings.txt") 
-
+'''
 
   
 

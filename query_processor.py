@@ -31,12 +31,14 @@ class QueryProcessor:
 
     
     def process_query(self, query, number_results=10):
+        to_add = []
         bigrams = []
         scores = defaultdict(float)
         
 
         # tokenize 
         query_terms = word_tokenize(query)
+        
         
 
         # invalid free text query if it contains quotations
@@ -45,15 +47,8 @@ class QueryProcessor:
         
         # remove punctuation
         query_terms = [term for term in query_terms if term not in punctuation]
+
         '''
-        # remove duplicate terms and stem the terms - cant use set() since need to preserve order
-        # dont need to remove though i think?
-        for term in initial_terms:
-            if term not in unique_terms:
-                query_terms.append(term)
-                unique_terms.append(term)
-            
-        
         # add relevant query terms with Wordnet
         for query in query_terms:
             query = wn.synsets(query)[0]
@@ -61,18 +56,30 @@ class QueryProcessor:
                 to_add.append(lemma.name())
         query_terms = query_terms.union(set(to_add))
         '''
+        # remove duplicate terms
+        query_terms = set(query_terms)
         
         # stem the terms
         query_terms = [self.stemmer.stem(term.lower()) for term in query_terms]
 
-        
+        '''
         # convert terms to bigrams
         if (len(query_terms) != 0):
             for i in range(len(query_terms) - 1):
                 bigram = (query_terms[i], query_terms[i + 1])
                 bigrams.append(bigram)
             query_terms = bigrams
-        
+        '''
+        # add additional related query terms from legal thesaurus
+
+        with open("binary_thesaurus.txt", "rb") as input:
+            thesaurus = pickle.loads(input.read())
+            for term in query_terms:
+                if term in thesaurus.keys():
+                    to_add.extend(thesaurus[term])
+
+        query_terms.extend(to_add)
+
         # remove invalid terms
         query_terms = [term for term in query_terms if term in self.dictionary]
         
@@ -88,7 +95,6 @@ class QueryProcessor:
 
             for (doc_id, weight_docu) in postings_list:
                 # compute tf.idf for term in document
-                # weight_docu = (1 + log(term_freq))
                 scores[doc_id] += weight_term * weight_docu
 
         '''
@@ -133,61 +139,88 @@ class QueryProcessor:
     
     def process_query_boolean(self, query):
         bigrams = []
-        try: 
-            tokens = word_tokenize(query)
-            
+        #try: 
+        tokens = word_tokenize(query)
 
-            #remove quotation marks - double check why theres 2 unique quotation marks strings
-            tokens = [term for term in tokens if term != "``"]
-            tokens = [term for term in tokens if term != "''"]
-            tokens = [2 if term == "AND" else term for term in tokens]
+        #remove punctuation 
+        tokens = [term for term in tokens if term not in punctuation]
 
-            # check for any invalid tokens
-            invalid_tokens = []
-            for t in tokens:
-                if t in self.dictionary:
-                    if "&" in t or "|" in t or "~" in t:
-                        invalid_tokens.append(t)
-                else:
-                    if t not in self.OPERATOR_LIST:
-                        invalid_tokens.append(t)
+        #remove quotation marks - double check why theres 2 unique quotation marks strings
+        tokens = [term for term in tokens if term != "``"]
+        tokens = [term for term in tokens if term != "''"]
+        tokens = [2 if term == "AND" else term for term in tokens]
+        #stem
+        tokens = [self.stemmer.stem(term.lower()) if term != self.OPERATOR_AND else term for term in tokens]
 
-            if len(invalid_tokens) > 0:
-                return "invalid token(s): " + ", ".join(invalid_tokens)
-            
-            # convert terms to bigrams - need to account for operators 
-            # double check logic for queries with 1-2 words - prob need to account for trivial expressions e.g. phrase AND nothing
-            # bigram logic currently evaluates "quiet phone AND call", without doing "quiet phone AND phone call" - see if makes sense
-            if (len(tokens) > 2):
-                for i in range(len(tokens) - 1):
-                    if (tokens[i + 1] == self.OPERATOR_AND):
+
+        
+        '''
+        # check for any invalid tokens - just remove instead of breaking?
+        invalid_tokens = []
+        for t in tokens:
+            if t in self.dictionary:
+                if "&" in t or "|" in t or "~" in t:
+                    invalid_tokens.append(t)
+            else:
+                if t not in self.OPERATOR_LIST:
+                    invalid_tokens.append(t)
+
+        if len(invalid_tokens) > 0:
+            return "invalid token(s): " + ", ".join(invalid_tokens)
+        '''
+        # convert terms to bigrams 
+        # double check logic for queries with 1-2 words - prob need to account for trivial expressions e.g. phrase AND nothing
+        # bigram logic currently evaluates "phone AND 'high court date'" into phone AND high court AND date
+
+        if (len(tokens) > 2):
+            for i in range(0, len(tokens) - 1, 2):
+                if (tokens[i + 1] == self.OPERATOR_AND):
+                    if (tokens[i] in self.dictionary):
+                        bigrams.append(tokens[i])
                         bigrams.append(self.OPERATOR_AND)
-                    elif (tokens[i] == self.OPERATOR_AND):
-                        if (i + 2 == len(tokens)):
-                            bigrams.append(tokens[i + 1])
-                        else:
-                            continue
-                    else:
-                        bigram = (tokens[i], tokens[i + 1])
-                        # remove bigram if not in dictionary to avoid KeyError
-                        if bigram in self.dictionary:
+                elif (tokens[i] == self.OPERATOR_AND):
+                    if (tokens[i + 1] in self.dictionary):
+                        bigrams.append(self.OPERATOR_AND)
+                        bigrams.append(tokens[i + 1])
+                #bigram code - check for trigrams here
+                else:
+                    bigram = (tokens[i], tokens[i + 1])
+                    # remove bigram if not in dictionary to avoid KeyError
+                    if bigram in self.dictionary:
+                        # prevent out of bounds error
+                        if (i != 0 and tokens[i - 1] != self.OPERATOR_AND):
+                            bigrams.append(self.OPERATOR_AND)
                             bigrams.append(bigram)
-                tokens = bigrams
-            
-            #tokens = self.optimise_query(tokens) -- add back evaluating shorter postings lists first
-            #boolean AND query has to have at least 3 tokens including the AND
-            if len(tokens) < 3: 
-                return ""
+                        elif ((i + 1) != len(tokens) - 1 and tokens[i + 2] != self.OPERATOR_AND):
+                            print (f"i is {i}")
+                            print (f"token to check is {tokens[i + 2]}")
+                            bigrams.append(bigram)
+                            bigrams.append(self.OPERATOR_AND)
+                        else:
+                            bigrams.append(bigram)       
+            if (len(tokens)%2 != 0) and tokens[len(tokens) - 1] in self.dictionary:
+                if (tokens[len(tokens) - 2] != self.OPERATOR_AND):
+                    bigrams.append(self.OPERATOR_AND)
+                bigrams.append(tokens[len(tokens) - 1])
+            tokens = bigrams
+        # tokens = self.optimise_query(tokens) -- add back evaluating shorter postings lists first
+        # boolean AND query has to have at least 3 tokens including the AND
 
-            postfix = self.convert_to_postfix(tokens)
+        if len(tokens) < 3: 
+            return ""
+        
+        postfix = self.convert_to_postfix(tokens)
 
-            # add sorting results by idf 
-            result = self.evaluate_postfix(postfix)
-            
-        except Exception as e:
-            return "ERROR" + str(e)
+
+        result = self.evaluate_postfix(postfix)
+
+        #only return docIDs
+        result = [str(tuple[0])  for tuple in result]   
+        #except Exception as e:
+            #return "ERROR" + str(e)
         
         return str(result)
+
 
         
     '''
@@ -247,6 +280,7 @@ class QueryProcessor:
                 results_list.append(to_add)
                 current_index_1 += 1
                 current_index_2 += 1
+            
             elif (postings1[current_index_1][0] < postings2[current_index_2][0]):
                 if (current_index_1 + skip_1 < len(postings1)):
                     if (postings1[current_index_1 + skip_1][0] <= postings2[current_index_2][0]):
@@ -263,18 +297,19 @@ class QueryProcessor:
                        current_index_2 += 1
                 else:
                     current_index_2 += 1
+        
+        # sort tuples of (docID, tf-idf) by tf-idf
         results_list = sorted(results_list, key = lambda x: x[1], reverse = True)
-        results_list = [str(tuple[0])  for tuple in results_list]
         return results_list
 
 
 
 '''
 qp = QueryProcessor("dictionary.txt", "postings.txt")
-query = '"high court" AND "phone call"'
+query = 'quiet phone call'
 
 test1 = [(30, 30), (40, 40), (50, 50), (70, 70)] 
 test2 = [(30, 20), (40, 40), (60, 60,), (70, 70)]
 test3 = [("second", 50), ("first", 30), ("third", 70)]
-print(qp.process_query_boolean(query))
+print(qp.process_query(query))
 '''
