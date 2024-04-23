@@ -37,9 +37,11 @@ def usage():
 
 
 def build_index():
-    print('initializing dask client')
-    client = Client()
-    print(client)
+    n_workers = 6
+    print(f'initializing dask client with {n_workers} workers')
+   
+    client = Client(n_workers=n_workers, threads_per_worker=1)
+    print(client.dashboard_link)
 
     print('reading dataset...')
     stopwords = set(nltk.corpus.stopwords.words('english'))
@@ -48,10 +50,10 @@ def build_index():
     df = pd.read_csv('data/dataset.csv', sep=',', header=0, quotechar='"', quoting=csv.QUOTE_ALL)
 
     # dataset = dd.from_pandas(df, chunksize=100)
-    bag = db.from_sequence(df['content'][:100])
+    bag = db.from_sequence(df['content'][:33])
     token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stopwords).compute()
 
-    doc_ids = list(df['document_id'][:100])
+    doc_ids = list(df['document_id'][:33])
 
     # result = dataset.map_partitions(tokenize_partition, stemmer=stemmer, stopwords=stopwords).compute()
     # output_format = {'counter_tokens': Counter}
@@ -94,16 +96,19 @@ def build_index():
 
     document_term_matrix = document_term_matrix.todense()
     document_term_array = np.asarray(document_term_matrix)
+    # client.scatter(document_term_array)
     nrow, ncol = document_term_matrix.shape
+    
+    # ncol//n_workers
+    document_term_array_cols = da.from_array(document_term_matrix, chunks={0:nrow,1:1})
 
-    # document_term_matrix_cols = da.from_array(document_term_matrix, chunks=(nrow,1))
     # document_term_matrix_rows = da.from_array(document_term_matrix, chunks=(ncol,1))
 
     # doc_term_matrix_csr = document_term_matrix.tocsr()
     # doc_term_matrix_csc = document_term_matrix.tocsc()
 
     # initialise the matrices for the pLSA algorithm
-    num_topics = 10
+    num_topics = 7
     topic_given_doc = np.random.rand(num_documents,num_topics)
     topic_given_doc = da.from_array(topic_given_doc)
     topic_given_doc = topic_given_doc / topic_given_doc.sum(axis=1)[:, np.newaxis]
@@ -158,6 +163,11 @@ def build_index():
         # Avoid division by zero by using np.where
         P_z_dw = np.where(denominator != 0, P_z_dw / denominator, 0)
 
+        # make doc/topic axis the chunk
+        P_z_dw = P_z_dw.rechunk((-1,1,-1))
+
+        # client.scatter(P_z_dw)
+
         print('e step complete')
 
         # M-step: Update P(w|z) and P(d|z)
@@ -171,18 +181,30 @@ def build_index():
             return result # shape num_topics
 
         # assuming block is one column
-        def process_term_frequencies_block(values):
-            values_ext = values[np.newaxis, :, np.newaxis]
-            result = values_ext * P_z_dw[:,j,:]
+        def process_term_frequencies_block(term_array, term_topic_array):
+            term_array_ext = term_array.squeeze()[:, np.newaxis]
+            print('term_array', term_array)
+            print('term_array_ext', term_array_ext)
+            print('term_topic_array', term_topic_array)
+            
+            result = term_array_ext * term_topic_array.squeeze()
+            result = result.sum(axis=0)
             return result
 
-        results = [delayed(process_term_frequencies)(j) for j in range(num_terms)]
-        results = dask.compute(*results)
-        print('term frequencies processed')
-        # results = document_term_matrix_cols.map_blocks(process_term_frequencies_block)
+        # range_num_terms = da.arange(start=0, stop=num_terms, step=1, chunks='auto')
+        # results = [delayed(process_term_frequencies)(j) for j in range(num_terms)]
+        # results = dask.compute(*results)
+        # print('term frequencies processed')
+        # results = document_term_array_cols.map_blocks(process_term_frequencies_block)
+        print('document_term_array_cols.shape', document_term_array_cols.shape)
+        print('P_z_dw.shape', P_z_dw.shape)
+        print(document_term_array_cols.numblocks)
+        print(P_z_dw.numblocks)
+        results = da.map_blocks(lambda a,b: process_term_frequencies_block(a,b), document_term_array_cols, P_z_dw)
         # sum along the document axis
+        print('results.shape', results.shape)
         
-        stacked_results = da.stack(results,axis=1) # shape num_topics, num_terms
+        # stacked_results = da.stack(results,axis=1) # shape num_topics, num_terms
         # combined_results = da.sum(stacked_results, axis=1)
         denominators = stacked_results.sum(axis=0, keepdims=False)
         mask = denominators==0

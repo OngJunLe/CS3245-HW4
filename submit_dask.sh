@@ -2,9 +2,10 @@
 #SBATCH --time=300
 #SBATCH --job-name=cs3245_hw4
 #SBATCH --partition=medium
-#SBATCH --mem=128G
+#SBATCH --mem=200GB
 
 source $HOME/miniconda3/etc/profile.d/conda.sh
+#bash
 conda activate cs3245
 
 free -m
