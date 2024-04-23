@@ -39,6 +39,37 @@ class QueryProcessor:
         # tokenize 
         query_terms = word_tokenize(query)
         
+        
+
+        # invalid free text query if it contains quotations
+        if ('``' in query_terms):
+            return ""
+        
+        # remove punctuation
+        query_terms = [term for term in query_terms if term not in punctuation]
+
+        '''
+        # add relevant query terms with Wordnet
+        for query in query_terms:
+            query = wn.synsets(query)[0]
+            for lemma in query.lemmas():
+                to_add.append(lemma.name())
+        query_terms = query_terms.union(set(to_add))
+        '''
+        # remove duplicate terms
+        query_terms = set(query_terms)
+        
+        # stem the terms
+        query_terms = [self.stemmer.stem(term.lower()) for term in query_terms]
+
+        '''
+        # convert terms to bigrams
+        if (len(query_terms) != 0):
+            for i in range(len(query_terms) - 1):
+                bigram = (query_terms[i], query_terms[i + 1])
+                bigrams.append(bigram)
+            query_terms = bigrams
+        '''
         # add additional related query terms from legal thesaurus
 
         with open("binary_thesaurus.txt", "rb") as input:
@@ -49,40 +80,6 @@ class QueryProcessor:
 
         query_terms.extend(to_add)
 
-        # invalid free text query if it contains quotations
-        if ('``' in query_terms):
-            return ""
-        
-        # remove punctuation
-        query_terms = [term for term in query_terms if term not in punctuation]
-        '''
-        # remove duplicate terms - cant use set() since need to preserve order
-        # dont need to remove though i think? for bigrams
-        for term in initial_terms:
-            if term not in unique_terms:
-                query_terms.append(term)
-                unique_terms.append(term)
-            
-        
-        # add relevant query terms with Wordnet
-        for query in query_terms:
-            query = wn.synsets(query)[0]
-            for lemma in query.lemmas():
-                to_add.append(lemma.name())
-        query_terms = query_terms.union(set(to_add))
-        '''
-        
-        # stem the terms
-        query_terms = [self.stemmer.stem(term.lower()) for term in query_terms]
-
-        
-        # convert terms to bigrams
-        if (len(query_terms) != 0):
-            for i in range(len(query_terms) - 1):
-                bigram = (query_terms[i], query_terms[i + 1])
-                bigrams.append(bigram)
-            query_terms = bigrams
-        
         # remove invalid terms
         query_terms = [term for term in query_terms if term in self.dictionary]
         
@@ -98,7 +95,6 @@ class QueryProcessor:
 
             for (doc_id, weight_docu) in postings_list:
                 # compute tf.idf for term in document
-                # weight_docu = (1 + log(term_freq))
                 scores[doc_id] += weight_term * weight_docu
 
         '''
@@ -155,9 +151,6 @@ class QueryProcessor:
         tokens = [2 if term == "AND" else term for term in tokens]
         #stem
         tokens = [self.stemmer.stem(term.lower()) if term != self.OPERATOR_AND else term for term in tokens]
-        
-        # remove invalid terms
-        #tokens = [term for term in tokens if term.lower() in self.dictionary]
 
 
         
@@ -178,7 +171,7 @@ class QueryProcessor:
         # convert terms to bigrams 
         # double check logic for queries with 1-2 words - prob need to account for trivial expressions e.g. phrase AND nothing
         # bigram logic currently evaluates "phone AND 'high court date'" into phone AND high court AND date
-        print(f"prebigram: {tokens}")
+
         if (len(tokens) > 2):
             for i in range(0, len(tokens) - 1, 2):
                 if (tokens[i + 1] == self.OPERATOR_AND):
@@ -210,15 +203,15 @@ class QueryProcessor:
                     bigrams.append(self.OPERATOR_AND)
                 bigrams.append(tokens[len(tokens) - 1])
             tokens = bigrams
-        #tokens = self.optimise_query(tokens) -- add back evaluating shorter postings lists first
-        #boolean AND query has to have at least 3 tokens including the AND
-        print(f"postbigram: {tokens}")
+        # tokens = self.optimise_query(tokens) -- add back evaluating shorter postings lists first
+        # boolean AND query has to have at least 3 tokens including the AND
+
         if len(tokens) < 3: 
             return ""
         
         postfix = self.convert_to_postfix(tokens)
 
-        print(f"postfix: {postfix}")
+
         result = self.evaluate_postfix(postfix)
 
         #only return docIDs
@@ -268,8 +261,6 @@ class QueryProcessor:
 
     #need to add returning results by idf
     def and_operation(self, postings1, postings2):
-        #print(f"postings1: {postings1}")
-        #print(f"postings2: {postings2}")
         log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
         current_index_1 = 0
         current_index_2 = 0
@@ -278,8 +269,6 @@ class QueryProcessor:
         results_list = []
 
         while current_index_1 < len(postings1) and current_index_2 < len(postings2):
-            #print(f"postings1[current_index_1][0]: {postings1[current_index_1][0]}")
-            #print(f"postings2[current_index_2][0]: {postings2[current_index_2][0]}")
             if (postings1[current_index_1] == postings2[current_index_2]):
                 to_add = postings1[current_index_1]
                 # calculate tf.idf for this term
@@ -308,6 +297,8 @@ class QueryProcessor:
                        current_index_2 += 1
                 else:
                     current_index_2 += 1
+        
+        # sort tuples of (docID, tf-idf) by tf-idf
         results_list = sorted(results_list, key = lambda x: x[1], reverse = True)
         return results_list
 
