@@ -80,27 +80,25 @@ def tokenize(input):
             temp_postings[word].append((id, 1 + math.log10(bigram_list[word])))
     return temp_postings
 
-def process_legal_dict(dictionary, stemmer, stoplist):
+def process_legal_dict(dictionary):
     legal_dict = defaultdict(list)
     output_dict = {}
+    stoplist = STOPWORDS
+    stemmer = STEMMER
     with open(dictionary, "r", encoding="utf-8") as input:
-        #while True:
-        for i in range(2):
+        while True:
             line = input.readline()
             if ("LASTLINE" in line):
                 break
             if (len(line) > 2 and "ASSOCIATED CONCEPTS" not in line and "FOREIGN PHRASES" not in line and "Generally" not in line and "Specifically" not in line):
-                #print(line)
                 line = line.split(", ")
                 # delete token indicating gramamatical nature of term
                 del line[1]
-
-                # only add bigrams to thesaurus
+                # only add single words or bigrams to thesaurus
                 tokens = [word for word in line if len(word.split(" ")) < 3]
                 # remove stopwords and stem
                 tokens = [word for word in tokens if word.lower() not in stoplist]
                 tokens = [stemmer.stem(word) for word in tokens]
-                #print(tokens)
                 for word in tokens:
                     temp = []
                     temp.extend(tokens)
@@ -157,14 +155,6 @@ def build_index(in_dir, out_dict, out_postings):
     # Storing byte offset in dictionary so that postings lists can be retrieved without reading entire file
     current_offset = 0 
     with open(out_postings, "wb") as output:
-        '''
-        # Add document length dictionary - removed normalisation for now 
-        dictionary_binary = pickle.dumps(doc_length_dictionary)
-        no_of_bytes = len(dictionary_binary)
-        term_dictionary[DOCUMENT_LENGTH_KEY] = (current_offset, no_of_bytes)
-        output.write(dictionary_binary)
-        current_offset += no_of_bytes
-        '''
         for key in temp_postings.keys():
             to_add = sorted(temp_postings[key])
             # to_add_binary = pickle.dumps(to_add)
@@ -187,9 +177,10 @@ def build_index(in_dir, out_dict, out_postings):
         output.write(dictionary_binary)
     
     # Not sure if should have seperate code file for this 
-    # process_legal_dict("burtons_thesaurus.txt", stemmer, stoplist)
+    # process_legal_dict("burtons_thesaurus.txt")
 
     print ("indexing over")
+
 
 
 '''
@@ -244,7 +235,6 @@ if (__name__ == "__main__"):
     #build_index("dataset.csv", "dictionary.txt", "postings.txt") 
     #build_index("test.csv", "test_dictionary.txt", "test_postings.txt") 
 
-  
 
 
 
