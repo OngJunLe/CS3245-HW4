@@ -4,3 +4,4 @@ dataset.zip
 *.out
 /venv
 /dask-venv
+/__pycache__

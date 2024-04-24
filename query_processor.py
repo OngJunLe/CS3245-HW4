@@ -7,6 +7,8 @@ from index import DOCUMENT_LENGTH_KEY, TOTAL_DOCUMENTS_KEY
 from nltk import PorterStemmer, word_tokenize
 from string import punctuation
 from nltk.corpus import wordnet as wn
+import zlib
+import struct
 
 class QueryProcessor:
     OPERATOR_AND = 2
@@ -133,7 +135,14 @@ class QueryProcessor:
         # read the postings list from the postings file
         with open(self.postings_file, 'rb') as f:
             f.seek(offset)
-            postings_list = pickle.loads(f.read(bytes_to_read))
+
+            read_data = f.read(bytes_to_read)
+
+            # Decompress and unpack data
+            decompressed_data = zlib.decompress(read_data)
+            postings_list = [struct.unpack('if', decompressed_data[i:i+8]) for i in range(0, len(decompressed_data), 8)]
+
+            # postings_list = pickle.loads()
 
         return postings_list
     
@@ -304,12 +313,8 @@ class QueryProcessor:
 
 
 
-'''
-qp = QueryProcessor("dictionary.txt", "postings.txt")
-query = 'quiet phone call'
+if __name__ == "__main__":
+    qp = QueryProcessor("data/struct_compress_dictionary", "data/struct_compress_postings")
+    query = 'quiet phone call'
 
-test1 = [(30, 30), (40, 40), (50, 50), (70, 70)] 
-test2 = [(30, 20), (40, 40), (60, 60,), (70, 70)]
-test3 = [("second", 50), ("first", 30), ("third", 70)]
-print(qp.process_query(query))
-'''
+    print(qp.process_query(query))

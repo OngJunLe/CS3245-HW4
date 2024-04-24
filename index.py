@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import re
 import nltk
 import sys
@@ -10,7 +10,7 @@ import collections
 import math
 import csv
 import pandas as pd
-import dask.bag as db
+from concurrent.futures import ProcessPoolExecutor
 import zlib
 import struct
 
@@ -30,6 +30,11 @@ from pandas import Series
 DOCUMENT_LENGTH_KEY = -100
 TOTAL_DOCUMENTS_KEY = -200
 
+# Global variables
+STEMMER = nltk.stem.PorterStemmer()
+STOPWORDS =set(stopwords.words('english'))# set(['the', 'is', 'at', 'which', 'on', 'of', 'and', 'a'])
+
+
 def usage():
     print("usage: " + sys.argv[0] + " -i directory-of-documents -d temp_postings-file -p postings-file")
 
@@ -41,7 +46,7 @@ def is_int(word):
     else:
         return True
     
-def tokenize(input, stemmer,stopwords):
+def tokenize(input):
     temp_postings = defaultdict(list) 
     bigram_list = []
     tokens = word_tokenize(input)
@@ -56,10 +61,10 @@ def tokenize(input, stemmer,stopwords):
     tokens = [word for word in tokens if not any(char in string.punctuation for char in word)]
 
     #Remove stop words: common words that do not contribute to meaning of text
-    tokens = [word for word in tokens if word.lower() not in stopwords]
+    tokens = [word for word in tokens if word.lower() not in STOPWORDS]
 
     #Stemming
-    tokens = [stemmer.stem(word) for word in tokens] 
+    tokens = [STEMMER.stem(word) for word in tokens] 
 
     #Convert any integers to save memory 
     #tokens = [int(word) if is_int(word) else word for word in tokens]
@@ -106,15 +111,21 @@ def build_index(in_dir, out_dict, out_postings):
     # Pls implement your code in below
     temp_postings = defaultdict(list) 
     term_dictionary = {}
-    stemmer = nltk.stem.PorterStemmer()
+    # stemmer = nltk.stem.PorterStemmer()
     total_documents = 0
 
-    stoplist = set(stopwords.words('english'))
+    # stoplist = set(stopwords.words('english'))
     with open(in_dir, encoding="utf-8") as f:
         df = pd.read_csv(f, sep=',', header=0, quotechar='"', quoting=csv.QUOTE_ALL)
         total_documents = len(df.index)
-        bag = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['content'])
-        token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute() 
+        # bag = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['content'])
+        # token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute() 
+
+        documents = df['document_id'].apply(str) + "D0C_ID" + df['content']
+
+        with ProcessPoolExecutor() as executor:
+            token_counter_list = list(executor.map(tokenize, documents))
+    
         #Could prob just add list of doc_IDs here and append to each token_list from bag.map too - check if more efficient 
         for dictionary in token_counter_list:
             for key in dictionary:
@@ -149,7 +160,7 @@ def build_index(in_dir, out_dict, out_postings):
             to_add_binary = b''.join(struct.pack('if', *tup) for tup in to_add)
 
             # compress binary stream
-            # to_add_binary = zlib.compress(to_add_binary)
+            to_add_binary = zlib.compress(to_add_binary)
 
             no_of_bytes = len(to_add_binary)
             term_dictionary[key] = (current_offset, no_of_bytes)
