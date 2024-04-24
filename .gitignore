@@ -1,3 +1,7 @@
 postings.txt
 dataset.zip
 /data
+*.out
+/venv
+/dask-venv
+/__pycache__
