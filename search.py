@@ -38,19 +38,22 @@ def run_search(dict_file, postings_file, queries_file, results_file):
     else:
         result = qp.process_query(query, number_results=10).split(" ")
     
-    for doc in relevant_docs:
-        if doc in result:
-            # save index of relevant docs in initial results
-            result_strings.append((result.index(doc), doc))
-            result.remove(doc)
-    # sort relevant docs by order in result
-    result_strings = sorted(result_strings)
-    result_strings = [tuple[1] for tuple in result_strings]
-    result_strings.extend(result)
-    
+    if (relevant_docs != []):
+        for doc in relevant_docs:
+            if doc in result:
+                # save index of relevant docs in initial results
+                result_strings.append((result.index(doc), doc))
+                result.remove(doc)
+        # sort relevant docs by order in result
+        result_strings = sorted(result_strings)
+        result_strings = [tuple[1] for tuple in result_strings]
+        result_strings.extend(result)
+        result = result_strings
     with open(results_file, 'w') as f:
-        f.write(' '.join(result_strings))
+        f.write(' '.join(result))
     print(f'output written to {results_file}')
+
+
 
 
 if __name__ == "__main__":
@@ -83,4 +86,6 @@ if __name__ == "__main__":
 
 
 # python search.py -d 'data/struct_compress_dictionary' -p 'data/struct_compress_postings' -o 'data/q1_output.txt'
+
+
 
