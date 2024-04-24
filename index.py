@@ -81,21 +81,30 @@ def tokenize(input):
     return temp_postings
 
 def process_legal_dict(dictionary, stemmer, stoplist):
-    legal_dict = {}
+    legal_dict = defaultdict(list)
     with open(dictionary, "r", encoding="utf-8") as input:
         while True:
+        #for i in range(2):
             line = input.readline()
             if ("LASTLINE" in line):
                 break
             if (len(line) > 2 and "ASSOCIATED CONCEPTS" not in line and "FOREIGN PHRASES" not in line and "Generally" not in line and "Specifically" not in line):
+                print(line)
                 line = line.split(", ")
-                term = stemmer.stem(line.pop(0).lower())
-                del line[0]
+                # delete token indicating gramamatical nature of term
+                del line[1]
+
+                # only add bigrams to thesaurus
                 tokens = [word for word in line if len(word.split(" ")) < 3]
                 # remove stopwords and stem
                 tokens = [word for word in tokens if word.lower() not in stoplist]
                 tokens = [stemmer.stem(word) for word in tokens]
-                legal_dict[term] = tokens
+                print(tokens)
+                for word in tokens:
+                    temp = []
+                    temp.extend(tokens)
+                    temp.remove(word)
+                    legal_dict[word].append(temp)
     with open("binary_thesaurus.txt", "wb") as output:
         legal_dictionary_binary = pickle.dumps(legal_dict)
         output.write(legal_dictionary_binary)
@@ -177,9 +186,6 @@ def build_index(in_dir, out_dict, out_postings):
     # process_legal_dict("burtons_thesaurus.txt", stemmer, stoplist)
 
     print ("indexing over")
-
-
-
 
 
 '''
