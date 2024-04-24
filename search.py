@@ -40,14 +40,14 @@ def run_search(dict_file, postings_file, queries_file, results_file):
     
     for doc in relevant_docs:
         if doc in result:
-            #sort relevant docs by order in result
+            # save index of relevant docs in initial results
             result_strings.append((result.index(doc), doc))
             result.remove(doc)
-        result_strings = sorted(result_strings)
-        result_strings = [tuple[1] for tuple in result_strings]
+    # sort relevant docs by order in result
+    result_strings = sorted(result_strings)
+    result_strings = [tuple[1] for tuple in result_strings]
     result_strings.extend(result)
     
-    # boolean result string somehow not getting joined , double check
     with open(results_file, 'w') as f:
         f.write(' '.join(result_strings))
     print(f'output written to {results_file}')
@@ -80,6 +80,7 @@ if __name__ == "__main__":
         sys.exit(2)
 
     run_search(dictionary_file, postings_file, file_of_queries, file_of_output)
+
 
 # python search.py -d 'data/struct_compress_dictionary' -p 'data/struct_compress_postings' -o 'data/q1_output.txt'
 
