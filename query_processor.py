@@ -14,7 +14,8 @@ import struct
 
 class QueryProcessor:
     OPERATOR_AND = 2
-    OPERATOR_LIST = [OPERATOR_AND]
+    OPERATOR_OR = 3
+    OPERATOR_LIST = [OPERATOR_AND, OPERATOR_OR]
 
     def __init__(self, dictionary_file, postings_file):
         with open(dictionary_file, 'rb') as f:
@@ -142,7 +143,7 @@ class QueryProcessor:
         #remove quotation marks - double check why theres 2 unique quotation marks strings
         tokens = [term for term in tokens if term != "``"]
         tokens = [term for term in tokens if term != "''"]
-        tokens = [2 if term == "AND" else term for term in tokens]
+        tokens = [self.OPERATOR_AND if term == "AND" else term for term in tokens]
 
         #stem
         tokens = [self.stemmer.stem(term.lower()) if term != self.OPERATOR_AND else term for term in tokens]
@@ -150,57 +151,98 @@ class QueryProcessor:
         # convert terms to bigrams 
         # bigram logic currently evaluates "phone AND 'high court date'" into phone AND high court AND date
 
-        # boolean needs to be at least 3 tokens i.e term AND term
-        if (len(tokens) > 2):
-            #loop jumps through tokens with a skip of 2
-            for i in range(0, len(tokens) - 1, 2):
-                # case if 2 tokens found are (term, AND)
-                if (tokens[i + 1] == self.OPERATOR_AND):
-                    #only append term if term in dictionary to avoid KeyError when evaluating
-                    if (tokens[i] in self.dictionary):
-                        bigrams.append(tokens[i])
-                        bigrams.append(self.OPERATOR_AND)
-                # case if 2 tokens found are (AND, term) 
-                elif (tokens[i] == self.OPERATOR_AND):
-                    if (tokens[i + 1] in self.dictionary):
-                        bigrams.append(self.OPERATOR_AND)
-                        bigrams.append(tokens[i + 1])
-                # case if 2 tokens found are (term1, term 2)
-                else:
-                    bigram = (tokens[i], tokens[i + 1])
-                    # only append bigram if in dictionary
-                    if bigram in self.dictionary:
-                        # check for out of bounds error
-                        # case if token before bigram (term1, term2) is not AND i.e. token was intially [term0, term1, term2] trigram
-                        if (i != 0 and tokens[i - 1] != self.OPERATOR_AND):
-                            # transforms [term0, term1, term2] to term0 AND (term1, term2) 
-                            bigrams.append(self.OPERATOR_AND)
-                            bigrams.append(bigram)
-                        # check for out of bounds error
-                        # case if token after bigram (term1, term2) is not AND i.e. token list was intially [term1, term2, term3] trigram
-                        elif ((i + 1) != len(tokens) - 1 and tokens[i + 2] != self.OPERATOR_AND):
-                            # transforms [term1, term2, term3] to (term1, term2) AND term3
-                            bigrams.append(bigram)
-                            bigrams.append(self.OPERATOR_AND)
-                        else:
-                            bigrams.append(bigram)     
-            # if there are odd number of tokens, last token wont be covered by the initial for loop due to skip of 2
-            # check if last token is in dictionary        
-            if (len(tokens)%2 != 0) and tokens[len(tokens) - 1] in self.dictionary:
-                # check that second last token wasnt AND e.g. initial token list was [term1, AND, term2]
-                # append AND if above wasnt the case e.g. initial token list of [term1, AND, term2, term3, term 4] becomes term1 AND (term2, term3) AND term4
-                if (tokens[len(tokens) - 2] != self.OPERATOR_AND):
-                    bigrams.append(self.OPERATOR_AND)
-                # for the former case e.g. initial token list [term1, AND, term2] becomes term1 AND term 2
-                bigrams.append(tokens[len(tokens) - 1])
-            # set tokens list to bigrammed tokens list
-            tokens = bigrams
+        # split the tokens by AND, each item between ANDs becomes a list of token(s)
+        items = []
+        prev_item = []
+        for t in tokens:
+            if t == 2:
+                tokens_split.append(prev_item)
+                prev_item = []
+            else:
+                prev_item.append(t)
+
+        # convert items with length 3 or 2 to bigrams
+        final_items = []
+        for item in items:
+            if len(item)>3 or len(item) == 0:
+                raise ValueError("Boolean query contains invalid item")
+            # if length is 3, create 2 bigrams and 3 single terms
+            if len(item) == 3:
+                final_items.append((item[0], item[1]))
+                final_items.append(self.OPERATOR_OR)
+                final_items.append((item[1], item[2]))
+                final_items.append(self.OPERATOR_OR)
+                final_items.append(item[0])
+                final_items.append(self.OPERATOR_OR)
+                final_items.append(item[1])
+                final_items.append(self.OPERATOR_OR)
+                final_items.append(item[2])
+                final_items.append(self.OPERATOR_AND)
+            elif len(item) == 2:
+                final_items.append((item[0], item[1]))
+                final_items.append(self.OPERATOR_OR)
+                final_items.append(item[0])
+                final_items.append(self.OPERATOR_OR)
+                final_items.append(item[1])
+                final_items.append(self.OPERATOR_AND)
+            elif len(item) == 1:
+                final_items.append(item[0])
+                final_items.append(self.OPERATOR_AND)
+
+
+                
+
+        # # boolean needs to be at least 3 tokens i.e term AND term
+        # if (len(tokens) > 2):
+        #     #loop jumps through tokens with a skip of 2
+        #     for i in range(0, len(tokens) - 1, 2):
+        #         # case if 2 tokens found are (term, AND)
+        #         if (tokens[i + 1] == self.OPERATOR_AND):
+        #             #only append term if term in dictionary to avoid KeyError when evaluating
+        #             if (tokens[i] in self.dictionary):
+        #                 bigrams.append(tokens[i])
+        #                 bigrams.append(self.OPERATOR_AND)
+        #         # case if 2 tokens found are (AND, term) 
+        #         elif (tokens[i] == self.OPERATOR_AND):
+        #             if (tokens[i + 1] in self.dictionary):
+        #                 bigrams.append(self.OPERATOR_AND)
+        #                 bigrams.append(tokens[i + 1])
+        #         # case if 2 tokens found are (term1, term 2)
+        #         else:
+        #             bigram = (tokens[i], tokens[i + 1])
+        #             # only append bigram if in dictionary
+        #             if bigram in self.dictionary:
+        #                 # check for out of bounds error
+        #                 # case if token before bigram (term1, term2) is not AND i.e. token was intially [term0, term1, term2] trigram
+        #                 if (i != 0 and tokens[i - 1] != self.OPERATOR_AND):
+        #                     # transforms [term0, term1, term2] to term0 AND (term1, term2) 
+        #                     bigrams.append(self.OPERATOR_AND)
+        #                     bigrams.append(bigram)
+        #                 # check for out of bounds error
+        #                 # case if token after bigram (term1, term2) is not AND i.e. token list was intially [term1, term2, term3] trigram
+        #                 elif ((i + 1) != len(tokens) - 1 and tokens[i + 2] != self.OPERATOR_AND):
+        #                     # transforms [term1, term2, term3] to (term1, term2) AND term3
+        #                     bigrams.append(bigram)
+        #                     bigrams.append(self.OPERATOR_AND)
+        #                 else:
+        #                     bigrams.append(bigram)     
+        #     # if there are odd number of tokens, last token wont be covered by the initial for loop due to skip of 2
+        #     # check if last token is in dictionary        
+        #     if (len(tokens)%2 != 0) and tokens[len(tokens) - 1] in self.dictionary:
+        #         # check that second last token wasnt AND e.g. initial token list was [term1, AND, term2]
+        #         # append AND if above wasnt the case e.g. initial token list of [term1, AND, term2, term3, term 4] becomes term1 AND (term2, term3) AND term4
+        #         if (tokens[len(tokens) - 2] != self.OPERATOR_AND):
+        #             bigrams.append(self.OPERATOR_AND)
+        #         # for the former case e.g. initial token list [term1, AND, term2] becomes term1 AND term 2
+        #         bigrams.append(tokens[len(tokens) - 1])
+        #     # set tokens list to bigrammed tokens list
+        #     tokens = bigrams
 
         # put this here as token list might become less than 3 tokens after bigraming e.g. (term1, term2) AND 
-        if len(tokens) < 3: 
+        if len(final_list) < 3: 
             return ""
         
-        postfix = self.convert_to_postfix(tokens)
+        postfix = self.convert_to_postfix(final_list)
 
         result = self.evaluate_postfix(postfix)
 
@@ -247,9 +289,10 @@ class QueryProcessor:
         eval_stack = []
         for token in postfix:
             if token in self.OPERATOR_LIST:
-                print('eval_stack')
-                print(eval_stack)
-                eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
+                if token == self.OPERATOR_OR:
+                    eval_stack.append(self.or_operation(eval_stack.pop(), eval_stack.pop()))
+                elif token == self.OPERATOR_AND:
+                    eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
             else:
                 eval_stack.append(self.fetch_postings_list(token))
                 
@@ -313,6 +356,40 @@ class QueryProcessor:
                        current_index_2 += 1
                 else:
                     current_index_2 += 1
+        
+        return results_list
+
+    def or_operation(self, postings1, postings2):
+        log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
+
+        #current index for each postings 
+        current_index_1 = 0
+        current_index_2 = 0
+
+        results_list = []
+
+        # while current index still in bounds
+        while current_index_1 < len(postings1) and current_index_2 < len(postings2):
+            # if current docIDs match
+            if (postings1[current_index_1][0] == postings2[current_index_2][0]):
+
+                # add tf-idf for both terms together
+                # first item is just the docID, which will be same for both postings
+                to_add = (postings1[current_index_1][0], postings1[current_index_1][1] + postings2[current_index_2][1])
+
+                results_list.append(to_add)
+                current_index_1 += 1
+                current_index_2 += 1
+
+            # if current docID in postings 1 is smaller than postings2
+            elif (postings1[current_index_1][0] < postings2[current_index_2][0]):
+                results_list.append(postings1[current_index_1])
+                current_index_1 += 1
+            # if current docID in postings2 is smaller than postings1
+            # same logic as above
+            else:
+                results_list.append(postings2[current_index_2])
+                current_index_2 += 1
         
         return results_list
 
