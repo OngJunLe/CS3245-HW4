@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 import re
 import nltk
 import sys
@@ -11,6 +11,8 @@ import math
 import csv
 import pandas as pd
 import dask.bag as db
+import zlib
+import struct
 
 from nltk.corpus import reuters
 from nltk.corpus import stopwords
@@ -141,7 +143,14 @@ def build_index(in_dir, out_dict, out_postings):
         '''
         for key in temp_postings.keys():
             to_add = sorted(temp_postings[key])
-            to_add_binary = pickle.dumps(to_add)
+            # to_add_binary = pickle.dumps(to_add)
+
+            # pack data as binary
+            to_add_binary = b''.join(struct.pack('if', *tup) for tup in to_add)
+
+            # compress binary stream
+            # to_add_binary = zlib.compress(to_add_binary)
+
             no_of_bytes = len(to_add_binary)
             term_dictionary[key] = (current_offset, no_of_bytes)
             output.write(to_add_binary)
@@ -154,7 +163,7 @@ def build_index(in_dir, out_dict, out_postings):
         output.write(dictionary_binary)
     
     # Not sure if should have seperate code file for this 
-    process_legal_dict("burtons_thesaurus.txt", stemmer, stoplist)
+    # process_legal_dict("burtons_thesaurus.txt", stemmer, stoplist)
 
     print ("indexing over")
 
