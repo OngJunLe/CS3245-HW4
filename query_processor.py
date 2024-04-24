@@ -3,7 +3,7 @@ import heapq
 import re
 from collections import defaultdict
 from math import log
-from index import TOTAL_DOCUMENTS_KEY
+#from index import TOTAL_DOCUMENTS_KEY
 from nltk import PorterStemmer, word_tokenize
 from string import punctuation
 from nltk.corpus import wordnet as wn
@@ -11,7 +11,7 @@ import zlib
 import struct
 
 
-
+TOTAL_DOCUMENTS_KEY = -200
 class QueryProcessor:
     OPERATOR_AND = 2
     OPERATOR_OR = 3
@@ -116,6 +116,7 @@ class QueryProcessor:
     
 
     def fetch_postings_list(self, term):
+        log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
         offset, bytes_to_read = self.dictionary[term]
 
         # read the postings list from the postings file
@@ -128,8 +129,13 @@ class QueryProcessor:
             decompressed_data = zlib.decompress(read_data)
             postings_list = [struct.unpack('if', decompressed_data[i:i+8]) for i in range(0, len(decompressed_data), 8)]
 
-            # postings_list = pickle.loads()
-
+            # calculate tf.idf before returning postings: postings currently tuples of (docID, tf)
+            # heuristic: assume log freq weight of term t in query = 1
+            docu_freq = len(postings_list)
+            weight_term = log_N - log(docu_freq)
+            
+            postings_list = [(tuple[0], tuple[1] * weight_term) for tuple in postings_list]
+  
         return postings_list
     
     def process_query_boolean(self, query):
@@ -257,15 +263,6 @@ class QueryProcessor:
         return result
 
 
-        
-    '''
-    def tokenize_query(self, query):
-        for token in re.findall(self.regex_pattern, query):
-            if token == "AND":
-                yield self.OPERATOR_AND
-            else:
-                yield self.stemmer.stem(token).lower()
-    '''
     # use shunting-yard algorithm to process query into postfix notation
     def convert_to_postfix(self, tokens):
         output_queue = []
@@ -300,8 +297,6 @@ class QueryProcessor:
 
 
     def and_operation(self, postings1, postings2):
-        log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
-
         #current index for each postings 
         current_index_1 = 0
         current_index_2 = 0
@@ -318,18 +313,9 @@ class QueryProcessor:
                 to_add = postings1[current_index_1]
                 to_add_2 = postings2[current_index_2]
 
-                # calculate tf.idf for both terms
-                # heuristic: assume log freq weight of term t in query = 1
-                docu_freq = len(postings1)
-                weight_term = log_N - log(docu_freq)
-
-                docu_freq_2 = len(postings2)
-                weight_term_2 = log_N - log(docu_freq_2)
-
-                 # add tf-idf for both terms together
+                # add tf-idf for both terms together
                 # to_add[0] is just the docID, which will be same for both postings
-                to_add = (to_add[0], to_add[1] * weight_term + to_add_2[1] * weight_term_2)
-                # if calculating idf for queries, just multiply by weight term again?
+                to_add = (to_add[0], to_add[1] + to_add_2[1])
 
                 results_list.append(to_add)
                 current_index_1 += 1
