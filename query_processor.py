@@ -12,7 +12,6 @@ import struct
 
 
 
-
 class QueryProcessor:
     OPERATOR_AND = 2
     OPERATOR_LIST = [OPERATOR_AND]
@@ -318,11 +317,10 @@ class QueryProcessor:
         return results_list
 
 
-
+'''
 if __name__ == "__main__":
     qp = QueryProcessor("data/struct_compress_dictionary", "data/struct_compress_postings")
     query = 'quiet phone call'
 
     print(qp.process_query(query))
-
-
+'''
