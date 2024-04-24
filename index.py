@@ -144,7 +144,7 @@ def build_index(in_dir, out_dict, out_postings):
             for key in dictionary:
                 #list of tuples instead of list of list of tuples
                 temp_postings[key].append(dictionary[key][0])
-            dictionary.clear()  
+            dictionary.clear()
         '''
         # Document vector length calculation - removed normalisation for now
         sum = 0

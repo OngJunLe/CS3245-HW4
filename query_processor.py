@@ -162,14 +162,15 @@ class QueryProcessor:
         prev_item = []
         for t in tokens:
             if t == 2:
-                tokens_split.append(prev_item)
+                items.append(prev_item)
                 prev_item = []
             else:
                 prev_item.append(t)
+        items.append(prev_item)
 
         # convert items with length 3 or 2 to bigrams
         final_items = []
-        for item in items:
+        for i,item in enumerate(items):
             if len(item)>3 or len(item) == 0:
                 raise ValueError("Boolean query contains invalid item")
             # if length is 3, create 2 bigrams and 3 single terms
@@ -183,17 +184,20 @@ class QueryProcessor:
                 final_items.append(item[1])
                 final_items.append(self.OPERATOR_OR)
                 final_items.append(item[2])
-                final_items.append(self.OPERATOR_AND)
+                if i >= len(items)-1:
+                    final_items.append(self.OPERATOR_AND)
             elif len(item) == 2:
                 final_items.append((item[0], item[1]))
                 final_items.append(self.OPERATOR_OR)
                 final_items.append(item[0])
                 final_items.append(self.OPERATOR_OR)
                 final_items.append(item[1])
-                final_items.append(self.OPERATOR_AND)
+                if i >= len(items)-1:
+                    final_items.append(self.OPERATOR_AND)
             elif len(item) == 1:
                 final_items.append(item[0])
-                final_items.append(self.OPERATOR_AND)
+                if i >= len(items)-1:
+                    final_items.append(self.OPERATOR_AND)
 
 
                 
@@ -245,15 +249,18 @@ class QueryProcessor:
         #     tokens = bigrams
 
         # put this here as token list might become less than 3 tokens after bigraming e.g. (term1, term2) AND 
-        if len(final_list) < 3: 
+        if len(final_items) < 3: 
             return ""
+
+        # print('final_items', final_items)
         
-        postfix = self.convert_to_postfix(final_list)
+        postfix = self.convert_to_postfix(final_items)
 
         result = self.evaluate_postfix(postfix)
 
         # sort tuples of (docID, tf-idf) by tf-idf
         result = sorted(result, key = lambda x: x[1], reverse = True)
+        # print(result)
 
         #only return docIDs
         result = [str(r[0]) for r in result]   
@@ -278,6 +285,8 @@ class QueryProcessor:
 
         while operator_stack:
             output_queue.append(operator_stack.pop())
+
+        # print(output_queue)
 
         return output_queue
     
