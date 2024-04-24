@@ -88,7 +88,7 @@ class QueryProcessor:
         if len(scores) == 0:
             return ""
 
-        print(dict(sorted(scores.items(), key=lambda item: item[1])))
+        # print(dict(sorted(scores.items(), key=lambda item: item[1])))
         # exit()
         score_threshold = 4
         ids_to_return = [str(item[0]) for item in scores.items() if item[1]>score_threshold]
@@ -252,7 +252,7 @@ class QueryProcessor:
         if len(final_items) < 3: 
             return ""
 
-        print('final_items', final_items)
+        # print('final_items', final_items)
         
         postfix = self.convert_to_postfix(final_items)
 
@@ -260,7 +260,7 @@ class QueryProcessor:
 
         # sort tuples of (docID, tf-idf) by tf-idf
         result = sorted(result, key = lambda x: x[1], reverse = True)
-        print(result)
+        # print(result)
 
         #only return docIDs
         result = [str(r[0]) for r in result]   
@@ -286,7 +286,7 @@ class QueryProcessor:
         while operator_stack:
             output_queue.append(operator_stack.pop())
 
-        print(output_queue)
+        # print(output_queue)
 
         return output_queue
     
