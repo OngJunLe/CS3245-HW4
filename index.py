@@ -82,14 +82,15 @@ def tokenize(input):
 
 def process_legal_dict(dictionary, stemmer, stoplist):
     legal_dict = defaultdict(list)
+    output_dict = {}
     with open(dictionary, "r", encoding="utf-8") as input:
-        while True:
-        #for i in range(2):
+        #while True:
+        for i in range(2):
             line = input.readline()
             if ("LASTLINE" in line):
                 break
             if (len(line) > 2 and "ASSOCIATED CONCEPTS" not in line and "FOREIGN PHRASES" not in line and "Generally" not in line and "Specifically" not in line):
-                print(line)
+                #print(line)
                 line = line.split(", ")
                 # delete token indicating gramamatical nature of term
                 del line[1]
@@ -99,16 +100,19 @@ def process_legal_dict(dictionary, stemmer, stoplist):
                 # remove stopwords and stem
                 tokens = [word for word in tokens if word.lower() not in stoplist]
                 tokens = [stemmer.stem(word) for word in tokens]
-                print(tokens)
+                #print(tokens)
                 for word in tokens:
                     temp = []
                     temp.extend(tokens)
                     temp.remove(word)
                     legal_dict[word].append(temp)
+    for key in legal_dict.keys():
+        output_dict[key] = [word for word in legal_dict[key][0]]
+
     with open("binary_thesaurus.txt", "wb") as output:
-        legal_dictionary_binary = pickle.dumps(legal_dict)
+        legal_dictionary_binary = pickle.dumps(output_dict)
         output.write(legal_dictionary_binary)
-    
+
 
 def build_index(in_dir, out_dict, out_postings):
     """
@@ -239,7 +243,6 @@ if (__name__ == "__main__"):
     
     #build_index("dataset.csv", "dictionary.txt", "postings.txt") 
     #build_index("test.csv", "test_dictionary.txt", "test_postings.txt") 
-
 
   
 
