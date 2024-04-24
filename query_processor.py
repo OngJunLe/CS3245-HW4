@@ -247,8 +247,8 @@ class QueryProcessor:
         eval_stack = []
         for token in postfix:
             if token in self.OPERATOR_LIST:
-                print('eval_stack')
-                print(eval_stack)
+                #print('eval_stack')
+                #print(eval_stack)
                 eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
             else:
                 eval_stack.append(self.fetch_postings_list(token))
