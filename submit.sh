@@ -12,5 +12,4 @@ conda activate cs3245
 free -m
 
 #python index.py
-# python -u index_concurrent.py -i 'data/dataset.csv' -d 'data/test' -p 'data/test'
-python -u query_processor.py
+python -u index_concurrent.py -i 'data/dataset.csv' -d 'data/test' -p 'data/test'

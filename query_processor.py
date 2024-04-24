@@ -107,26 +107,31 @@ class QueryProcessor:
         if len(scores) == 0:
             return ""
 
-        highest_scores = heapq.nlargest(number_results, scores.items(), key=lambda item: item[1])
+        # print(dict(sorted(scores.items(), key=lambda item: item[1])))
+        # exit()
+        score_threshold = 4
+        ids_to_return = [str(item[0]) for item in scores.items() if item[1]>score_threshold]
 
-        # order by scores, then by term
+        # highest_scores = heapq.nlargest(number_results, scores.items(), key=lambda item: item[1])
 
-        highest_terms = []
-        same_scores = []
-        for item in highest_scores:
-            # if score is the same as the previous highest score, add to list
-            if highest_terms and item[1] == highest_terms[-1][1]:
-                same_scores.append(item)
-            # if score is different, sort the list of same scores by term
-            elif same_scores:
-                same_scores.sort(key=lambda x: x[0])
-                highest_terms.extend(same_scores)
-            else:
-                highest_terms.append(item)
+        # # order by scores, then by term
+
+        # highest_terms = []
+        # same_scores = []
+        # for item in highest_scores:
+        #     # if score is the same as the previous highest score, add to list
+        #     if highest_terms and item[1] == highest_terms[-1][1]:
+        #         same_scores.append(item)
+        #     # if score is different, sort the list of same scores by term
+        #     elif same_scores:
+        #         same_scores.sort(key=lambda x: x[0])
+        #         highest_terms.extend(same_scores)
+        #     else:
+        #         highest_terms.append(item)
         
-        highest_terms = [str(item[0]) for item in highest_terms]
+        # highest_terms = [str(item[0]) for item in highest_terms]
 
-        return " ".join(highest_terms)
+        return " ".join(ids_to_return)
     
 
     def fetch_postings_list(self, term):
@@ -224,7 +229,7 @@ class QueryProcessor:
         result = self.evaluate_postfix(postfix)
 
         #only return docIDs
-        result = [str(tuple[0])  for tuple in result]   
+        result = [str(r[0]) for r in result]   
         #except Exception as e:
             #return "ERROR" + str(e)
         
@@ -263,9 +268,12 @@ class QueryProcessor:
         eval_stack = []
         for token in postfix:
             if token in self.OPERATOR_LIST:
+                print('eval_stack')
+                print(eval_stack)
                 eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
             else:
                 eval_stack.append(self.fetch_postings_list(token))
+                
         return eval_stack[0]
 
     #need to add returning results by idf
