@@ -42,20 +42,29 @@ class QueryProcessor:
         # tokenize 
         query_terms = word_tokenize(query)
         
-        
-
         # invalid free text query if it contains quotations
         if ('``' in query_terms):
             return ""
         
         # remove punctuation
-        query_terms = [term for term in query_terms if term not in punctuation]
+        # query_terms = [term for term in query_terms if term not in punctuation]
+
+        # keep only letters in each string
+        query_terms = [''.join([char for char in t if char.isalpha()]) for t in query_terms]
+
+        # remove empty tokens
+        query_terms = [t for t in query_terms if t]
 
         # remove duplicate terms
         query_terms = set(query_terms)
         
         # stem the terms
         query_terms = [self.stemmer.stem(term.lower()) for term in query_terms]
+
+        terms_with_fields = []
+        for term in query_terms:
+            terms_with_fields.append("court#" + term)
+            terms_with_fields.append("title#" + term)
 
         # add additional related query terms from legal thesaurus
 
@@ -69,21 +78,31 @@ class QueryProcessor:
 
         # remove invalid terms
         query_terms = [term for term in query_terms if term in self.dictionary]
+        terms_with_fields = [term for term in terms_with_fields if term in self.dictionary]
         
         log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
 
         for term in query_terms:
             postings_list = self.fetch_postings_list(term)
 
+            # TFIDF ALREADY CALCULATED IN FETCH_POSTINGS_LIST
             # calculate tf.idf for this term
             # heuristic: assume log freq weight of term t in query = 1
-            docu_freq = len(postings_list)
-            weight_term = log_N - log(docu_freq)
+            # docu_freq = len(postings_list)
+            # weight_term = log_N - log(docu_freq)
 
             for (doc_id, weight_docu) in postings_list:
                 # compute tf.idf for term in document
                 # would idf for queries just involve multiplying this by weight term again? since idf is same, tf should be 1 in query since we remove duplicates 
-                scores[doc_id] += weight_term * weight_docu
+                scores[doc_id] += weight_docu
+
+        for term in terms_with_fields:
+            postings_list = self.fetch_postings_list(term, extra_weight=3)
+
+            for (doc_id, weight_docu) in postings_list:
+                # compute tf.idf for term in document
+                # would idf for queries just involve multiplying this by weight term again? since idf is same, tf should be 1 in query since we remove duplicates 
+                scores[doc_id] += weight_docu
 
         if len(scores) == 0:
             return ""
@@ -92,6 +111,9 @@ class QueryProcessor:
         # exit()
         score_threshold = 4
         ids_to_return = [str(item[0]) for item in scores.items() if item[1]>score_threshold]
+
+        if len(ids_to_return) < 1000:
+            return [str(item[0]) for item in scores.items()[:1000]]
 
         # highest_scores = heapq.nlargest(number_results, scores.items(), key=lambda item: item[1])
 
@@ -115,7 +137,10 @@ class QueryProcessor:
         return " ".join(ids_to_return)
     
 
-    def fetch_postings_list(self, term):
+    def fetch_postings_list(self, term, extra_weight=1):
+        if term not in self.dictionary.keys():
+            return []
+
         log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
         offset, bytes_to_read = self.dictionary[term]
 
@@ -134,7 +159,7 @@ class QueryProcessor:
             docu_freq = len(postings_list)
             weight_term = log_N - log(docu_freq)
             
-            postings_list = [(tuple[0], tuple[1] * weight_term) for tuple in postings_list]
+            postings_list = [(tup[0], tup[1] * weight_term * extra_weight) for tup in postings_list]
   
         return postings_list
     
@@ -144,7 +169,13 @@ class QueryProcessor:
         tokens = word_tokenize(query)
 
         #remove punctuation 
-        tokens = [term for term in tokens if term not in punctuation]
+        # tokens = [term for term in tokens if term not in punctuation]
+
+        # keep only letters in each string
+        tokens = [''.join([char for char in t if char.isalpha()]) for t in tokens]
+
+        # remove empty tokens
+        tokens = [t for t in tokens if t]
 
         #remove quotation marks - double check why theres 2 unique quotation marks strings
         tokens = [term for term in tokens if term != "``"]
@@ -184,7 +215,7 @@ class QueryProcessor:
                 final_items.append(item[1])
                 final_items.append(self.OPERATOR_OR)
                 final_items.append(item[2])
-                if i >= len(items)-1:
+                if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
             elif len(item) == 2:
                 final_items.append((item[0], item[1]))
@@ -192,11 +223,12 @@ class QueryProcessor:
                 final_items.append(item[0])
                 final_items.append(self.OPERATOR_OR)
                 final_items.append(item[1])
-                if i >= len(items)-1:
+                if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
             elif len(item) == 1:
+                # if item[0]
                 final_items.append(item[0])
-                if i >= len(items)-1:
+                if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
 
 
@@ -266,8 +298,18 @@ class QueryProcessor:
         result = [str(r[0]) for r in result]   
         #except Exception as e:
             #return "ERROR" + str(e)
+
+        # STOP GAP MEASURE TO ACCOUNT FOR DUPLICATES BEING RETURNED
+        seen = set()
+        final_result = []
+        for item in result:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+            else:
+                print(f"already seen {item}, not adding to list")
         
-        return result
+        return final_result
 
 
     # use shunting-yard algorithm to process query into postfix notation
@@ -275,9 +317,9 @@ class QueryProcessor:
         output_queue = []
         operator_stack = []
 
-        for token in tokens:
+        for token in reversed(tokens):
             if token in self.OPERATOR_LIST:
-                while (operator_stack and operator_stack[-1] >= token): # OR AND NOT will never be greater than parenthesis, omit check for parenthesis
+                while (operator_stack and operator_stack[-1] >= token):
                     output_queue.append(operator_stack.pop())
                 operator_stack.append(token)
             else: # token is a term
@@ -286,21 +328,49 @@ class QueryProcessor:
         while operator_stack:
             output_queue.append(operator_stack.pop())
 
-        # print(output_queue)
-
         return output_queue
     
     
     def evaluate_postfix(self, postfix):
         eval_stack = []
+
+        def checkfordupes():
+            # raw_length = len(eval_stack[-1])
+            ids = [item[0] for item in eval_stack[-1]]
+            set_ids = set(ids)
+            if len(ids) != len(set_ids):
+                print('dupe found!!')
+                print('set_ids',set_ids)
+                print('ids',ids)
+
+        
         for token in postfix:
             if token in self.OPERATOR_LIST:
                 if token == self.OPERATOR_OR:
+                    print('conducting or')
                     eval_stack.append(self.or_operation(eval_stack.pop(), eval_stack.pop()))
+                    # print('eval_stack[-1]', eval_stack[-1])
+                    checkfordupes()
+                    exit()
+
                 elif token == self.OPERATOR_AND:
+                    print('conducting and')
                     eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
+                    checkfordupes()
             else:
-                eval_stack.append(self.fetch_postings_list(token))
+                if isinstance(token, tuple):
+                    eval_stack.append(self.fetch_postings_list(token))
+                else:
+                    if "court#"+token in self.dictionary.keys():
+                        eval_stack.append(self.fetch_postings_list("court#"+token))
+                    elif "title#"+token in self.dictionary.keys():
+                        eval_stack.append(self.fetch_postings_list("title#"+token))
+                    else:
+                        eval_stack.append(self.fetch_postings_list(token))
+
+                print(f'adding {token} to stack')
+
+        print('eval stack len:', len(eval_stack))
                 
         return eval_stack[0]
 
@@ -355,13 +425,18 @@ class QueryProcessor:
         return results_list
 
     def or_operation(self, postings1, postings2):
-        log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
+        # log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
+
+        # print('postings1', postings1)
+        # print('postings2', postings2)
 
         #current index for each postings 
         current_index_1 = 0
         current_index_2 = 0
 
         results_list = []
+
+        seen_ids = []
 
         # while current index still in bounds
         while current_index_1 < len(postings1) and current_index_2 < len(postings2):
@@ -372,19 +447,39 @@ class QueryProcessor:
                 # first item is just the docID, which will be same for both postings
                 to_add = (postings1[current_index_1][0], postings1[current_index_1][1] + postings2[current_index_2][1])
 
+                if postings1[current_index_1][0] in seen_ids:
+                    print("this id has been seen?")
+
                 results_list.append(to_add)
+                seen_ids.append(postings1[current_index_1][0])
                 current_index_1 += 1
                 current_index_2 += 1
 
             # if current docID in postings 1 is smaller than postings2
             elif (postings1[current_index_1][0] < postings2[current_index_2][0]):
+                if postings1[current_index_1][0] in seen_ids:
+                    print("this id has been seen?")
+
                 results_list.append(postings1[current_index_1])
                 current_index_1 += 1
             # if current docID in postings2 is smaller than postings1
             # same logic as above
             else:
+                if postings2[current_index_2][0] in seen_ids:
+                    print("this id has been seen?")
                 results_list.append(postings2[current_index_2])
                 current_index_2 += 1
+
+        if current_index_1<len(postings1):
+            # print('results_list', results_list)
+            # print('extending by', postings1[current_index_1:])
+            results_list.extend(postings1[current_index_1:])
+        if current_index_2<len(postings2):
+            # print('results_list', results_list)
+            # print('extending by', postings2[current_index_2:])
+            results_list.extend(postings2[current_index_2:])
+
+        # print('results_list', results_list)
         
         return results_list
 

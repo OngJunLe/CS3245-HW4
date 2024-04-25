@@ -41,7 +41,7 @@ def is_int(word):
     else:
         return True
     
-def tokenize(input, stemmer,stopwords):
+def tokenize(input, stemmer,stopwords, bigrams=False):
     temp_postings = defaultdict(list) 
     bigram_list = []
     tokens = word_tokenize(input)
@@ -53,7 +53,13 @@ def tokenize(input, stemmer,stopwords):
     tokens.insert(0, first[1])
 
     #Remove tokens with punctuation 
-    tokens = [word for word in tokens if not any(char in string.punctuation for char in word)]
+    # tokens = [word for word in tokens if not any(char in string.punctuation for char in word)]
+
+    # keep only letters in each string
+    tokens = [''.join([char for char in t if char.isalpha()]) for t in tokens]
+
+    # remove empty tokens
+    tokens = [t for t in tokens if t]
 
     #Remove stop words: common words that do not contribute to meaning of text
     tokens = [word for word in tokens if word.lower() not in stopwords]
@@ -64,16 +70,23 @@ def tokenize(input, stemmer,stopwords):
     #Convert any integers to save memory 
     #tokens = [int(word) if is_int(word) else word for word in tokens]
 
-    for i in range(len(tokens) - 1):
-        bigram = (tokens[i], tokens[i + 1])
-        bigram_list.append(bigram) 
-    bigram_list.extend(tokens)  
-    bigram_list = Counter(bigram_list)
+    if bigrams:
 
-    #Create tuples of (docID, log term freqeuncy) and appending to temp_postings
-    for word in bigram_list:
-            temp_postings[word].append((id, 1 + math.log10(bigram_list[word])))
-    return temp_postings
+        for i in range(len(tokens) - 1):
+            bigram = (tokens[i], tokens[i + 1])
+            bigram_list.append(bigram) 
+        bigram_list.extend(tokens)  
+        bigram_list = Counter(bigram_list)
+
+        #Create tuples of (docID, log term freqeuncy) and appending to temp_postings
+        for word in bigram_list:
+                temp_postings[word].append((id, 1 + math.log10(bigram_list[word])))
+        return temp_postings
+    else:
+        tokens_count = Counter(tokens)
+        for word in tokens_count:
+            temp_postings[word].append((id, 1 + math.log10(tokens_count[word])))
+        return temp_postings
 
 def process_legal_dict(dictionary, stemmer, stoplist):
     legal_dict = {}
@@ -114,12 +127,33 @@ def build_index(in_dir, out_dict, out_postings):
         df = pd.read_csv(f, sep=',', header=0, quotechar='"', quoting=csv.QUOTE_ALL)
         total_documents = len(df.index)
         bag = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['content'])
-        token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute() 
+        token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist, bigrams=True).compute() 
         #Could prob just add list of doc_IDs here and append to each token_list from bag.map too - check if more efficient 
+
+        bag2 = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['title'])
+        token_counter_list2 = bag2.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute()
+
+        bag3 = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['court'])
+        token_counter_list3 = bag3.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute()
+
+        # bag4 = db.from_sequence(df['date_posted'])
+
         for dictionary in token_counter_list:
             for key in dictionary:
                 #list of tuples instead of list of list of tuples
                 temp_postings[key].append(dictionary[key][0])
+            dictionary.clear()  
+
+        for dictionary in token_counter_list2:
+            for key in dictionary:
+                #list of tuples instead of list of list of tuples
+                temp_postings["title#" + key].append(dictionary[key][0])
+            dictionary.clear() 
+
+        for dictionary in token_counter_list3:
+            for key in dictionary:
+                #list of tuples instead of list of list of tuples
+                temp_postings["court#" + key].append(dictionary[key][0])
             dictionary.clear()  
         '''
         # Document vector length calculation - removed normalisation for now
@@ -149,7 +183,7 @@ def build_index(in_dir, out_dict, out_postings):
             to_add_binary = b''.join(struct.pack('if', *tup) for tup in to_add)
 
             # compress binary stream
-            # to_add_binary = zlib.compress(to_add_binary)
+            to_add_binary = zlib.compress(to_add_binary)
 
             no_of_bytes = len(to_add_binary)
             term_dictionary[key] = (current_offset, no_of_bytes)
