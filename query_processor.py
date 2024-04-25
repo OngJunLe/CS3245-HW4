@@ -107,32 +107,8 @@ class QueryProcessor:
         if len(scores) == 0:
             return ""
 
-        # print(dict(sorted(scores.items(), key=lambda item: item[1])))
-        # exit()
-        score_threshold = 4
-        ids_to_return = [str(item[0]) for item in scores.items() if item[1]>score_threshold]
-
-        if len(ids_to_return) < 1000:
-            return [str(item[0]) for item in scores.items()[:1000]]
-
-        # highest_scores = heapq.nlargest(number_results, scores.items(), key=lambda item: item[1])
-
-        # # order by scores, then by term
-
-        # highest_terms = []
-        # same_scores = []
-        # for item in highest_scores:
-        #     # if score is the same as the previous highest score, add to list
-        #     if highest_terms and item[1] == highest_terms[-1][1]:
-        #         same_scores.append(item)
-        #     # if score is different, sort the list of same scores by term
-        #     elif same_scores:
-        #         same_scores.sort(key=lambda x: x[0])
-        #         highest_terms.extend(same_scores)
-        #     else:
-        #         highest_terms.append(item)
-        
-        # highest_terms = [str(item[0]) for item in highest_terms]
+        result = sorted(scores.items(), key=lambda item: item[1])
+        ids_to_return = [str(item[0]) for item in result]
 
         return " ".join(ids_to_return)
     
@@ -164,8 +140,6 @@ class QueryProcessor:
         return postings_list
     
     def process_query_boolean(self, query):
-        bigrams = []
-        #try: 
         tokens = word_tokenize(query)
 
         #remove punctuation 
@@ -182,11 +156,10 @@ class QueryProcessor:
         tokens = [term for term in tokens if term != "''"]
         tokens = [self.OPERATOR_AND if term == "AND" else term for term in tokens]
 
-        #stem
+        # stem and lower terms
         tokens = [self.stemmer.stem(term.lower()) if term != self.OPERATOR_AND else term for term in tokens]
 
-        # convert terms to bigrams 
-        # bigram logic currently evaluates "phone AND 'high court date'" into phone AND high court AND date
+        ## convert terms to bigrams
 
         # split the tokens by AND, each item between ANDs becomes a list of token(s)
         items = []
@@ -217,6 +190,7 @@ class QueryProcessor:
                 final_items.append(item[2])
                 if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
+            # if length is 2, create 1 bigram and 2 single terms
             elif len(item) == 2:
                 final_items.append((item[0], item[1]))
                 final_items.append(self.OPERATOR_OR)
@@ -225,81 +199,32 @@ class QueryProcessor:
                 final_items.append(item[1])
                 if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
+            # if length is 1, just add the single term
             elif len(item) == 1:
-                # if item[0]
                 final_items.append(item[0])
                 if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
 
 
-                
-
-        # # boolean needs to be at least 3 tokens i.e term AND term
-        # if (len(tokens) > 2):
-        #     #loop jumps through tokens with a skip of 2
-        #     for i in range(0, len(tokens) - 1, 2):
-        #         # case if 2 tokens found are (term, AND)
-        #         if (tokens[i + 1] == self.OPERATOR_AND):
-        #             #only append term if term in dictionary to avoid KeyError when evaluating
-        #             if (tokens[i] in self.dictionary):
-        #                 bigrams.append(tokens[i])
-        #                 bigrams.append(self.OPERATOR_AND)
-        #         # case if 2 tokens found are (AND, term) 
-        #         elif (tokens[i] == self.OPERATOR_AND):
-        #             if (tokens[i + 1] in self.dictionary):
-        #                 bigrams.append(self.OPERATOR_AND)
-        #                 bigrams.append(tokens[i + 1])
-        #         # case if 2 tokens found are (term1, term 2)
-        #         else:
-        #             bigram = (tokens[i], tokens[i + 1])
-        #             # only append bigram if in dictionary
-        #             if bigram in self.dictionary:
-        #                 # check for out of bounds error
-        #                 # case if token before bigram (term1, term2) is not AND i.e. token was intially [term0, term1, term2] trigram
-        #                 if (i != 0 and tokens[i - 1] != self.OPERATOR_AND):
-        #                     # transforms [term0, term1, term2] to term0 AND (term1, term2) 
-        #                     bigrams.append(self.OPERATOR_AND)
-        #                     bigrams.append(bigram)
-        #                 # check for out of bounds error
-        #                 # case if token after bigram (term1, term2) is not AND i.e. token list was intially [term1, term2, term3] trigram
-        #                 elif ((i + 1) != len(tokens) - 1 and tokens[i + 2] != self.OPERATOR_AND):
-        #                     # transforms [term1, term2, term3] to (term1, term2) AND term3
-        #                     bigrams.append(bigram)
-        #                     bigrams.append(self.OPERATOR_AND)
-        #                 else:
-        #                     bigrams.append(bigram)     
-        #     # if there are odd number of tokens, last token wont be covered by the initial for loop due to skip of 2
-        #     # check if last token is in dictionary        
-        #     if (len(tokens)%2 != 0) and tokens[len(tokens) - 1] in self.dictionary:
-        #         # check that second last token wasnt AND e.g. initial token list was [term1, AND, term2]
-        #         # append AND if above wasnt the case e.g. initial token list of [term1, AND, term2, term3, term 4] becomes term1 AND (term2, term3) AND term4
-        #         if (tokens[len(tokens) - 2] != self.OPERATOR_AND):
-        #             bigrams.append(self.OPERATOR_AND)
-        #         # for the former case e.g. initial token list [term1, AND, term2] becomes term1 AND term 2
-        #         bigrams.append(tokens[len(tokens) - 1])
-        #     # set tokens list to bigrammed tokens list
-        #     tokens = bigrams
-
         # put this here as token list might become less than 3 tokens after bigraming e.g. (term1, term2) AND 
         if len(final_items) < 3: 
             return ""
 
-        # print('final_items', final_items)
-        
+        # convert to postfix notation
         postfix = self.convert_to_postfix(final_items)
 
+        # evaluate query
         result = self.evaluate_postfix(postfix)
 
         # sort tuples of (docID, tf-idf) by tf-idf
         result = sorted(result, key = lambda x: x[1], reverse = True)
-        # print(result)
 
         #only return docIDs
-        result = [str(r[0]) for r in result]   
-        #except Exception as e:
-            #return "ERROR" + str(e)
+        result = [str(r[0]) for r in result]
 
         # STOP GAP MEASURE TO ACCOUNT FOR DUPLICATES BEING RETURNED
+        # had a problem with the framework detecting duplicates
+        # we think we fixed the bug that was causing this, but left this in in case (not enough runs left to troubleshoot)
         seen = set()
         final_result = []
         for item in result:
@@ -310,7 +235,6 @@ class QueryProcessor:
                 print(f"already seen {item}, not adding to list")
         
         return final_result
-
 
     # use shunting-yard algorithm to process query into postfix notation
     def convert_to_postfix(self, tokens):
@@ -330,47 +254,29 @@ class QueryProcessor:
 
         return output_queue
     
-    
+    # evaluate the query
     def evaluate_postfix(self, postfix):
         eval_stack = []
-
-        def checkfordupes():
-            # raw_length = len(eval_stack[-1])
-            ids = [item[0] for item in eval_stack[-1]]
-            set_ids = set(ids)
-            if len(ids) != len(set_ids):
-                print('dupe found!!')
-                print('set_ids',set_ids)
-                print('ids',ids)
-
         
         for token in postfix:
             if token in self.OPERATOR_LIST:
                 if token == self.OPERATOR_OR:
-                    print('conducting or')
                     eval_stack.append(self.or_operation(eval_stack.pop(), eval_stack.pop()))
-                    # print('eval_stack[-1]', eval_stack[-1])
-                    checkfordupes()
-                    exit()
 
                 elif token == self.OPERATOR_AND:
-                    print('conducting and')
                     eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
-                    checkfordupes()
             else:
+                # if it's a bigram, directly add
                 if isinstance(token, tuple):
                     eval_stack.append(self.fetch_postings_list(token))
                 else:
+                    # if it's a single word, try to check if it matches any field tokens
                     if "court#"+token in self.dictionary.keys():
                         eval_stack.append(self.fetch_postings_list("court#"+token))
                     elif "title#"+token in self.dictionary.keys():
                         eval_stack.append(self.fetch_postings_list("title#"+token))
                     else:
                         eval_stack.append(self.fetch_postings_list(token))
-
-                print(f'adding {token} to stack')
-
-        print('eval stack len:', len(eval_stack))
                 
         return eval_stack[0]
 
@@ -425,18 +331,11 @@ class QueryProcessor:
         return results_list
 
     def or_operation(self, postings1, postings2):
-        # log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
-
-        # print('postings1', postings1)
-        # print('postings2', postings2)
-
         #current index for each postings 
         current_index_1 = 0
         current_index_2 = 0
 
         results_list = []
-
-        seen_ids = []
 
         # while current index still in bounds
         while current_index_1 < len(postings1) and current_index_2 < len(postings2):
@@ -447,39 +346,25 @@ class QueryProcessor:
                 # first item is just the docID, which will be same for both postings
                 to_add = (postings1[current_index_1][0], postings1[current_index_1][1] + postings2[current_index_2][1])
 
-                if postings1[current_index_1][0] in seen_ids:
-                    print("this id has been seen?")
-
                 results_list.append(to_add)
-                seen_ids.append(postings1[current_index_1][0])
                 current_index_1 += 1
                 current_index_2 += 1
 
             # if current docID in postings 1 is smaller than postings2
             elif (postings1[current_index_1][0] < postings2[current_index_2][0]):
-                if postings1[current_index_1][0] in seen_ids:
-                    print("this id has been seen?")
-
                 results_list.append(postings1[current_index_1])
                 current_index_1 += 1
             # if current docID in postings2 is smaller than postings1
             # same logic as above
             else:
-                if postings2[current_index_2][0] in seen_ids:
-                    print("this id has been seen?")
                 results_list.append(postings2[current_index_2])
                 current_index_2 += 1
-
+        
+        # add remaining parts of lists
         if current_index_1<len(postings1):
-            # print('results_list', results_list)
-            # print('extending by', postings1[current_index_1:])
             results_list.extend(postings1[current_index_1:])
         if current_index_2<len(postings2):
-            # print('results_list', results_list)
-            # print('extending by', postings2[current_index_2:])
             results_list.extend(postings2[current_index_2:])
-
-        # print('results_list', results_list)
         
         return results_list
 
