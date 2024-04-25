@@ -75,15 +75,16 @@ class QueryProcessor:
         for term in query_terms:
             postings_list = self.fetch_postings_list(term)
 
+            # TFIDF ALREADY CALCULATED IN FETCH_POSTINGS_LIST
             # calculate tf.idf for this term
             # heuristic: assume log freq weight of term t in query = 1
-            docu_freq = len(postings_list)
-            weight_term = log_N - log(docu_freq)
+            # docu_freq = len(postings_list)
+            # weight_term = log_N - log(docu_freq)
 
             for (doc_id, weight_docu) in postings_list:
                 # compute tf.idf for term in document
                 # would idf for queries just involve multiplying this by weight term again? since idf is same, tf should be 1 in query since we remove duplicates 
-                scores[doc_id] += weight_term * weight_docu
+                scores[doc_id] += weight_docu
 
         if len(scores) == 0:
             return ""
@@ -92,6 +93,9 @@ class QueryProcessor:
         # exit()
         score_threshold = 4
         ids_to_return = [str(item[0]) for item in scores.items() if item[1]>score_threshold]
+
+        if len(ids_to_return) < 1000:
+            return [str(item[0]) for item in scores.items()[:1000]]
 
         # highest_scores = heapq.nlargest(number_results, scores.items(), key=lambda item: item[1])
 
@@ -184,7 +188,7 @@ class QueryProcessor:
                 final_items.append(item[1])
                 final_items.append(self.OPERATOR_OR)
                 final_items.append(item[2])
-                if i >= len(items)-1:
+                if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
             elif len(item) == 2:
                 final_items.append((item[0], item[1]))
@@ -192,11 +196,11 @@ class QueryProcessor:
                 final_items.append(item[0])
                 final_items.append(self.OPERATOR_OR)
                 final_items.append(item[1])
-                if i >= len(items)-1:
+                if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
             elif len(item) == 1:
                 final_items.append(item[0])
-                if i >= len(items)-1:
+                if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
 
 
@@ -275,9 +279,9 @@ class QueryProcessor:
         output_queue = []
         operator_stack = []
 
-        for token in tokens:
+        for token in reversed(tokens):
             if token in self.OPERATOR_LIST:
-                while (operator_stack and operator_stack[-1] >= token): # OR AND NOT will never be greater than parenthesis, omit check for parenthesis
+                while (operator_stack and operator_stack[-1] >= token):
                     output_queue.append(operator_stack.pop())
                 operator_stack.append(token)
             else: # token is a term
@@ -285,8 +289,6 @@ class QueryProcessor:
 
         while operator_stack:
             output_queue.append(operator_stack.pop())
-
-        # print(output_queue)
 
         return output_queue
     
@@ -355,7 +357,7 @@ class QueryProcessor:
         return results_list
 
     def or_operation(self, postings1, postings2):
-        log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
+        # log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
 
         #current index for each postings 
         current_index_1 = 0

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --time=30
 #SBATCH --job-name=cs3245_hw4
-#SBATCH --partition=standard
+#SBATCH --partition=normal
 
 source $HOME/miniconda3/etc/profile.d/conda.sh
 conda activate cs3245
