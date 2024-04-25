@@ -20,15 +20,17 @@ QueryProcessor class is defined in query_processor.py, handles an individual que
 
 For both query types, query expansion was implemented through the use of Burton's Legal Thesaurus, to expand queries with terms more specific to the legal field. The txt file of this thesaurus was processed into binary_thesaurus.txt in index.py with Pickle, with some lines in the original thesaurus such as "FOREIGN PHRASES" skipped for brevity, as well as terms with len > 3 skipped for ease of integrating new query terms as bigram phrase queries. Zones were also implemented to put a larger weight on courts and titles in documents.
 
-process_query() works as follows as follows: word_tokenize() -> remove punctuation -> remove duplicate terms -> lower() -> stem() -> query expansion -> evaluate query.
+process_query() works as follows as follows: word_tokenize() -> extract only alphanumeric characters -> remove duplicate terms -> lower() -> stem() -> field query expansion -> query expansion -> evaluate query.
+field query expansion refers to checking if any of the query terms are present in fields - e.g. for token 'a', add 'court#a' as well
 Empty list is returned if there are quotation marks in the tokens, as phrase queries are not supported for free text search.
 Invalid terms (i.e. not defined in dictionary in indexing) are removed to avoid KeyError.
 For evaluation, postings list for each term are retrieved, used to calculate tf-idf scores following algorithm in lecture notes. Cosine normalization was not employed, as due to the nature of legal documents, it is possible that important terms e.g. court name might only occur a few times in a lengthy document.
 Scores are returned in sorted order, documents with equal scores are sorted by document number.
 
-process_query_boolean() works as follows: split the string into a list of tokens of operators/terms, remove punctuation and stem, process phrases to bigrams, convert the order of tokens to be in postfix notation, evaluate the query, loading postings from disk as needed.
+process_query_boolean() works as follows: split the string into a list of tokens of operators/terms, extract alphanumeric characters, and stem, process phrases to bigrams and single terms, convert the order of tokens to be in postfix notation, evaluate the query, loading postings from disk as needed.
 Invalid terms (i.e. not defined in dictionary in indexing) are removed to avoid KeyError.
 Bigrams are created by splitting tokens list on AND, with each item in between becoming an individual token list, and processed based on if it is a single term (no change), bigram (create 1 bigram, 2 single terms with OR operator), or trigram (create 2 bigrams, 3 single terms with OR operator)
+if single terms are also present with field information in the dictionary, e.g. court#term or title#term exists, then preferentially add that field term instead of the normal term
 AND and OR operations were both implemented for evaluation, with OR operations necessary for query expansion of boolean queries since expanding with AND would actually increase the specificity of the query instead.
 Tf-idf scores were calculated in fetch_postings_lists during the postfix process. This allows documents to be sorted and returned based on this score, with documents with equal scores sorted by document number. 
 
