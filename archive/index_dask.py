@@ -1,27 +1,18 @@
 #!/usr/bin/python3
-import re
 import nltk
 import sys
 import getopt
-import string
 import pickle
-import os
-import collections
 import math
 import csv
 import pandas as pd
 import dask.bag as db
 import zlib
 import struct
-
-from nltk.corpus import reuters
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from collections import Counter
 from collections import defaultdict
-from pandas import Series
-
-
 
 # Format of term dictionary {term: (offset, no_bytes), ...}
 # Format of postings [(docID, log term frequency), ...]
@@ -41,19 +32,11 @@ def is_int(word):
     else:
         return True
     
-def tokenize(input, stemmer,stopwords, bigrams=False):
+def tokenize(input, id, stemmer,stopwords, bigrams=False):
     temp_postings = defaultdict(list) 
     bigram_list = []
     tokens = word_tokenize(input)
-    first = tokens.pop(0)
-    first = first.split("D0C_ID")
-    id = int(first[0])
-
-    #Retain position of original word 
-    tokens.insert(0, first[1])
-
-    #Remove tokens with punctuation 
-    # tokens = [word for word in tokens if not any(char in string.punctuation for char in word)]
+    id = int(id)
 
     # keep only letters in each string
     tokens = [''.join([char for char in t if char.isalpha()]) for t in tokens]
@@ -66,9 +49,6 @@ def tokenize(input, stemmer,stopwords, bigrams=False):
 
     #Stemming
     tokens = [stemmer.stem(word) for word in tokens] 
-
-    #Convert any integers to save memory 
-    #tokens = [int(word) if is_int(word) else word for word in tokens]
 
     if bigrams:
 
@@ -88,26 +68,6 @@ def tokenize(input, stemmer,stopwords, bigrams=False):
             temp_postings[word].append((id, 1 + math.log10(tokens_count[word])))
         return temp_postings
 
-def process_legal_dict(dictionary, stemmer, stoplist):
-    legal_dict = {}
-    with open(dictionary, "r", encoding="utf-8") as input:
-        while True:
-            line = input.readline()
-            if ("LASTLINE" in line):
-                break
-            if (len(line) > 2 and "ASSOCIATED CONCEPTS" not in line and "FOREIGN PHRASES" not in line and "Generally" not in line and "Specifically" not in line):
-                line = line.split(", ")
-                term = stemmer.stem(line.pop(0).lower())
-                del line[0]
-                tokens = [word for word in line if len(word.split(" ")) < 3]
-                # remove stopwords and stem
-                tokens = [word for word in tokens if word.lower() not in stoplist]
-                tokens = [stemmer.stem(word) for word in tokens]
-                legal_dict[term] = tokens
-    with open("binary_thesaurus.txt", "wb") as output:
-        legal_dictionary_binary = pickle.dumps(legal_dict)
-        output.write(legal_dictionary_binary)
-    
 
 def build_index(in_dir, out_dict, out_postings):
     """
@@ -126,23 +86,29 @@ def build_index(in_dir, out_dict, out_postings):
     with open(in_dir, encoding="utf-8") as f:
         df = pd.read_csv(f, sep=',', header=0, quotechar='"', quoting=csv.QUOTE_ALL)
         total_documents = len(df.index)
-        bag = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['content'])
-        token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist, bigrams=True).compute() 
-        #Could prob just add list of doc_IDs here and append to each token_list from bag.map too - check if more efficient 
 
-        bag2 = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['title'])
-        token_counter_list2 = bag2.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute()
+        # create dask bags to parallelize processing
+        # map the tokenize function to these bags
+        bag = db.from_sequence(df['content'])
+        id_bag = db.from_sequence(df['document_id'].apply(str))
+        token_counter_list = db.map(tokenize, bag, id_bag, stemmer=stemmer, stopwords=stoplist, bigrams=True).compute()
 
-        bag3 = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['court'])
-        token_counter_list3 = bag3.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute()
+        bag2 = db.from_sequence(df['title'])
+        token_counter_list2 = db.map(tokenize, bag2, id_bag, stemmer=stemmer, stopwords=stoplist).compute()
+
+        bag3 = db.from_sequence(df['court'])
+        token_counter_list3 = db.map(tokenize, bag3, id_bag, stemmer=stemmer, stopwords=stoplist).compute()
 
         # bag4 = db.from_sequence(df['date_posted'])
 
+        # process the results of the dask processing
+        # combine all the dictionaries into 1 main one
         for dictionary in token_counter_list:
             for key in dictionary:
                 #list of tuples instead of list of list of tuples
                 temp_postings[key].append(dictionary[key][0])
-            dictionary.clear()  
+                
+            dictionary.clear() 
 
         for dictionary in token_counter_list2:
             for key in dictionary:
@@ -163,7 +129,7 @@ def build_index(in_dir, out_dict, out_postings):
         document_length = sum**0.5
         doc_length_dictionary[id] = document_length
         '''
-    #sorted_keys = sorted(list(temp_postings.keys())) -- do the keys need to be sorted for some reason? cant rmb, double check since cant sort tuples and str
+    
     # Storing byte offset in dictionary so that postings lists can be retrieved without reading entire file
     current_offset = 0 
     with open(out_postings, "wb") as output:
@@ -177,7 +143,6 @@ def build_index(in_dir, out_dict, out_postings):
         '''
         for key in temp_postings.keys():
             to_add = sorted(temp_postings[key])
-            # to_add_binary = pickle.dumps(to_add)
 
             # pack data as binary
             to_add_binary = b''.join(struct.pack('if', *tup) for tup in to_add)
@@ -185,6 +150,7 @@ def build_index(in_dir, out_dict, out_postings):
             # compress binary stream
             to_add_binary = zlib.compress(to_add_binary)
 
+            # write to file while storing offset
             no_of_bytes = len(to_add_binary)
             term_dictionary[key] = (current_offset, no_of_bytes)
             output.write(to_add_binary)
@@ -203,30 +169,27 @@ def build_index(in_dir, out_dict, out_postings):
 
 
 
-
-
-'''
-test = ["1", "2", "test"]
-test = [int(word) if word.isnumeric() else word for word in test]
-print(test)
-
-with open("dictionary.txt", "rb") as input:
-    dictionary = pickle.loads(input.read())
-    offset, to_read = dictionary[("phone", "call")] 
-with open("postings.txt", "rb") as input:
-    input.seek(offset)
-    postings = pickle.loads(input.read(to_read))
-    print(postings) 
-
-
-with open("dictionary.txt", "rb") as input:
-    dictionary = pickle.loads(input.read())
-    offset, to_read = dictionary["court"] 
-with open("postings.txt", "rb") as input:
-    input.seek(offset)
-    postings = pickle.loads(input.read(to_read))
-    print(postings)
-'''
+# process the raw .txt of the legal thesaurus we are using
+def process_legal_dict(dictionary, stemmer, stoplist):
+    legal_dict = {}
+    with open(dictionary, "r", encoding="utf-8") as input:
+        while True:
+            line = input.readline()
+            if ("LASTLINE" in line):
+                break
+            if (len(line) > 2 and "ASSOCIATED CONCEPTS" not in line and "FOREIGN PHRASES" not in line and "Generally" not in line and "Specifically" not in line):
+                line = line.split(", ")
+                term = stemmer.stem(line.pop(0).lower())
+                del line[0]
+                tokens = [word for word in line if len(word.split(" ")) < 3]
+                # remove stopwords and stem
+                tokens = [word for word in tokens if word.lower() not in stoplist]
+                tokens = [stemmer.stem(word) for word in tokens]
+                legal_dict[term] = tokens
+    with open("binary_thesaurus.txt", "wb") as output:
+        legal_dictionary_binary = pickle.dumps(legal_dict)
+        output.write(legal_dictionary_binary)
+    
 
 # So this doesn't run when this file is imported in other scripts
 if (__name__ == "__main__"): 
@@ -253,9 +216,6 @@ if (__name__ == "__main__"):
         sys.exit(2)
 
     build_index(input_directory, output_file_dictionary, output_file_postings)   
-    
-    #build_index("dataset.csv", "dictionary.txt", "postings.txt") 
-    #build_index("test.csv", "test_dictionary.txt", "test_postings.txt") 
 
 
   
