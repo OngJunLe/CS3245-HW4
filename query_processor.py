@@ -288,9 +288,6 @@ class QueryProcessor:
         
         postfix = self.convert_to_postfix(final_items)
 
-        print('postfix', postfix)
-        exit()
-
         result = self.evaluate_postfix(postfix)
 
         # sort tuples of (docID, tf-idf) by tf-idf
@@ -336,22 +333,42 @@ class QueryProcessor:
     
     def evaluate_postfix(self, postfix):
         eval_stack = []
+
+        def checkfordupes():
+            # raw_length = len(eval_stack[-1])
+            ids = [item[0] for item in eval_stack[-1]]
+            set_ids = set(ids)
+            if len(ids) != len(set_ids):
+                print('dupe found!!')
+                print('set_ids',set_ids)
+                print('ids',ids)
+
+        
         for token in postfix:
             if token in self.OPERATOR_LIST:
                 if token == self.OPERATOR_OR:
+                    print('conducting or')
                     eval_stack.append(self.or_operation(eval_stack.pop(), eval_stack.pop()))
+                    # print('eval_stack[-1]', eval_stack[-1])
+                    checkfordupes()
+                    exit()
+
                 elif token == self.OPERATOR_AND:
+                    print('conducting and')
                     eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
+                    checkfordupes()
             else:
                 if isinstance(token, tuple):
                     eval_stack.append(self.fetch_postings_list(token))
                 else:
-                    if "court#"+token in dictionary.keys():
+                    if "court#"+token in self.dictionary.keys():
                         eval_stack.append(self.fetch_postings_list("court#"+token))
-                    elif "title#"+token in dictionary.keys():
+                    elif "title#"+token in self.dictionary.keys():
                         eval_stack.append(self.fetch_postings_list("title#"+token))
                     else:
                         eval_stack.append(self.fetch_postings_list(token))
+
+                print(f'adding {token} to stack')
 
         print('eval stack len:', len(eval_stack))
                 
@@ -410,11 +427,16 @@ class QueryProcessor:
     def or_operation(self, postings1, postings2):
         # log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
 
+        # print('postings1', postings1)
+        # print('postings2', postings2)
+
         #current index for each postings 
         current_index_1 = 0
         current_index_2 = 0
 
         results_list = []
+
+        seen_ids = []
 
         # while current index still in bounds
         while current_index_1 < len(postings1) and current_index_2 < len(postings2):
@@ -425,24 +447,39 @@ class QueryProcessor:
                 # first item is just the docID, which will be same for both postings
                 to_add = (postings1[current_index_1][0], postings1[current_index_1][1] + postings2[current_index_2][1])
 
+                if postings1[current_index_1][0] in seen_ids:
+                    print("this id has been seen?")
+
                 results_list.append(to_add)
+                seen_ids.append(postings1[current_index_1][0])
                 current_index_1 += 1
                 current_index_2 += 1
 
             # if current docID in postings 1 is smaller than postings2
             elif (postings1[current_index_1][0] < postings2[current_index_2][0]):
+                if postings1[current_index_1][0] in seen_ids:
+                    print("this id has been seen?")
+
                 results_list.append(postings1[current_index_1])
                 current_index_1 += 1
             # if current docID in postings2 is smaller than postings1
             # same logic as above
             else:
+                if postings2[current_index_2][0] in seen_ids:
+                    print("this id has been seen?")
                 results_list.append(postings2[current_index_2])
                 current_index_2 += 1
 
         if current_index_1<len(postings1):
+            # print('results_list', results_list)
+            # print('extending by', postings1[current_index_1:])
             results_list.extend(postings1[current_index_1:])
         if current_index_2<len(postings2):
+            # print('results_list', results_list)
+            # print('extending by', postings2[current_index_2:])
             results_list.extend(postings2[current_index_2:])
+
+        # print('results_list', results_list)
         
         return results_list
 

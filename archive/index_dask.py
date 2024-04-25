@@ -183,7 +183,7 @@ def build_index(in_dir, out_dict, out_postings):
             to_add_binary = b''.join(struct.pack('if', *tup) for tup in to_add)
 
             # compress binary stream
-            # to_add_binary = zlib.compress(to_add_binary)
+            to_add_binary = zlib.compress(to_add_binary)
 
             no_of_bytes = len(to_add_binary)
             term_dictionary[key] = (current_offset, no_of_bytes)

@@ -5,3 +5,17 @@ dataset.zip
 /venv
 /dask-venv
 /__pycache__
+/_distutils_hack
+/_yaml
+/click
+/cloudpickle
+/dask
+/fsspec
+/locket
+/packaging
+/partd
+/setuptools
+/tlz
+/toolz
+/yaml
+/zipp
