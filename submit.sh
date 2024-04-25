@@ -12,4 +12,4 @@ conda activate cs3245
 free -m
 
 #python index.py
-python -u index_concurrent.py -i 'data/dataset.csv' -d 'data/test' -p 'data/test'
+python -u archive/index_dask.py -i 'data/dataset.csv' -d 'data/test' -p 'data/test'

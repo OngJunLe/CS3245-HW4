@@ -42,20 +42,29 @@ class QueryProcessor:
         # tokenize 
         query_terms = word_tokenize(query)
         
-        
-
         # invalid free text query if it contains quotations
         if ('``' in query_terms):
             return ""
         
         # remove punctuation
-        query_terms = [term for term in query_terms if term not in punctuation]
+        # query_terms = [term for term in query_terms if term not in punctuation]
+
+        # keep only letters in each string
+        query_terms = [''.join([char for char in t if char.isalpha()]) for t in query_terms]
+
+        # remove empty tokens
+        query_terms = [t for t in query_terms if t]
 
         # remove duplicate terms
         query_terms = set(query_terms)
         
         # stem the terms
         query_terms = [self.stemmer.stem(term.lower()) for term in query_terms]
+
+        terms_with_fields = []
+        for term in query_terms:
+            terms_with_fields.append("court#" + term)
+            terms_with_fields.append("title#" + term)
 
         # add additional related query terms from legal thesaurus
 
@@ -69,6 +78,7 @@ class QueryProcessor:
 
         # remove invalid terms
         query_terms = [term for term in query_terms if term in self.dictionary]
+        terms_with_fields = [term for term in terms_with_fields if term in self.dictionary]
         
         log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
 
@@ -80,6 +90,14 @@ class QueryProcessor:
             # heuristic: assume log freq weight of term t in query = 1
             # docu_freq = len(postings_list)
             # weight_term = log_N - log(docu_freq)
+
+            for (doc_id, weight_docu) in postings_list:
+                # compute tf.idf for term in document
+                # would idf for queries just involve multiplying this by weight term again? since idf is same, tf should be 1 in query since we remove duplicates 
+                scores[doc_id] += weight_docu
+
+        for term in terms_with_fields:
+            postings_list = self.fetch_postings_list(term, extra_weight=3)
 
             for (doc_id, weight_docu) in postings_list:
                 # compute tf.idf for term in document
@@ -119,7 +137,10 @@ class QueryProcessor:
         return " ".join(ids_to_return)
     
 
-    def fetch_postings_list(self, term):
+    def fetch_postings_list(self, term, extra_weight=1):
+        if term not in self.dictionary.keys():
+            return []
+
         log_N = log(self.dictionary[TOTAL_DOCUMENTS_KEY])
         offset, bytes_to_read = self.dictionary[term]
 
@@ -138,7 +159,7 @@ class QueryProcessor:
             docu_freq = len(postings_list)
             weight_term = log_N - log(docu_freq)
             
-            postings_list = [(tuple[0], tuple[1] * weight_term) for tuple in postings_list]
+            postings_list = [(tup[0], tup[1] * weight_term * extra_weight) for tup in postings_list]
   
         return postings_list
     
@@ -148,7 +169,13 @@ class QueryProcessor:
         tokens = word_tokenize(query)
 
         #remove punctuation 
-        tokens = [term for term in tokens if term not in punctuation]
+        # tokens = [term for term in tokens if term not in punctuation]
+
+        # keep only letters in each string
+        tokens = [''.join([char for char in t if char.isalpha()]) for t in tokens]
+
+        # remove empty tokens
+        tokens = [t for t in tokens if t]
 
         #remove quotation marks - double check why theres 2 unique quotation marks strings
         tokens = [term for term in tokens if term != "``"]
@@ -199,6 +226,7 @@ class QueryProcessor:
                 if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
             elif len(item) == 1:
+                # if item[0]
                 final_items.append(item[0])
                 if i < len(items)-1:
                     final_items.append(self.OPERATOR_AND)
@@ -260,6 +288,9 @@ class QueryProcessor:
         
         postfix = self.convert_to_postfix(final_items)
 
+        print('postfix', postfix)
+        exit()
+
         result = self.evaluate_postfix(postfix)
 
         # sort tuples of (docID, tf-idf) by tf-idf
@@ -270,8 +301,18 @@ class QueryProcessor:
         result = [str(r[0]) for r in result]   
         #except Exception as e:
             #return "ERROR" + str(e)
+
+        # STOP GAP MEASURE TO ACCOUNT FOR DUPLICATES BEING RETURNED
+        seen = set()
+        final_result = []
+        for item in result:
+            if item not in seen:
+                seen.add(item)
+                result.append(item)
+            else:
+                print(f"already seen {item}, not adding to list")
         
-        return result
+        return final_result
 
 
     # use shunting-yard algorithm to process query into postfix notation
@@ -302,7 +343,17 @@ class QueryProcessor:
                 elif token == self.OPERATOR_AND:
                     eval_stack.append(self.and_operation(eval_stack.pop(), eval_stack.pop()))
             else:
-                eval_stack.append(self.fetch_postings_list(token))
+                if isinstance(token, tuple):
+                    eval_stack.append(self.fetch_postings_list(token))
+                else:
+                    if "court#"+token in dictionary.keys():
+                        eval_stack.append(self.fetch_postings_list("court#"+token))
+                    elif "title#"+token in dictionary.keys():
+                        eval_stack.append(self.fetch_postings_list("title#"+token))
+                    else:
+                        eval_stack.append(self.fetch_postings_list(token))
+
+        print('eval stack len:', len(eval_stack))
                 
         return eval_stack[0]
 
