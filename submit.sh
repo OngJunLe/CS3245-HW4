@@ -12,4 +12,4 @@ conda activate cs3245
 free -m
 
 #python index.py
-python -u archive/index_dask.py -i 'data/dataset.csv' -d 'data/test' -p 'data/test'
+python -u archive/index_dask.py -i 'data/dataset.csv' -d 'data/dictionary_v2' -p 'data/postings_v2'

@@ -438,6 +438,11 @@ class QueryProcessor:
             else:
                 results_list.append(postings2[current_index_2])
                 current_index_2 += 1
+
+        if current_index_1<len(postings1):
+            results_list.extend(postings1[current_index_1:])
+        if current_index_2<len(postings2):
+            results_list.extend(postings2[current_index_2:])
         
         return results_list
 
