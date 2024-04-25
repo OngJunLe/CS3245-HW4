@@ -41,16 +41,16 @@ def is_int(word):
     else:
         return True
     
-def tokenize(input, stemmer,stopwords, bigrams=False):
+def tokenize(input, id, stemmer,stopwords, bigrams=False):
     temp_postings = defaultdict(list) 
     bigram_list = []
     tokens = word_tokenize(input)
-    first = tokens.pop(0)
-    first = first.split("D0C_ID")
-    id = int(first[0])
+    # first = tokens.pop(0)
+    # first = first.split("D0C_ID")
+    id = int(id)
 
     #Retain position of original word 
-    tokens.insert(0, first[1])
+    # tokens.insert(0, first[1])
 
     #Remove tokens with punctuation 
     # tokens = [word for word in tokens if not any(char in string.punctuation for char in word)]
@@ -126,15 +126,17 @@ def build_index(in_dir, out_dict, out_postings):
     with open(in_dir, encoding="utf-8") as f:
         df = pd.read_csv(f, sep=',', header=0, quotechar='"', quoting=csv.QUOTE_ALL)
         total_documents = len(df.index)
-        bag = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['content'])
-        token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist, bigrams=True).compute() 
+        bag = db.from_sequence(df['content'])
+        id_bag = db.from_sequence(df['document_id'].apply(str))
+        token_counter_list = db.map(tokenize, bag, id_bag, stemmer=stemmer, stopwords=stoplist, bigrams=True).compute()
+        # token_counter_list = bag.map(tokenize, stemmer=stemmer, stopwords=stoplist, bigrams=True).compute() 
         #Could prob just add list of doc_IDs here and append to each token_list from bag.map too - check if more efficient 
 
-        bag2 = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['title'])
-        token_counter_list2 = bag2.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute()
+        bag2 = db.from_sequence(df['title'])
+        token_counter_list2 = db.map(tokenize, bag2, id_bag, stemmer=stemmer, stopwords=stoplist).compute()
 
-        bag3 = db.from_sequence(df['document_id'].apply(str) + "D0C_ID" + df['court'])
-        token_counter_list3 = bag3.map(tokenize, stemmer=stemmer, stopwords=stoplist).compute()
+        bag3 = db.from_sequence(df['court'])
+        token_counter_list3 = db.map(tokenize, bag3, id_bag, stemmer=stemmer, stopwords=stoplist).compute()
 
         # bag4 = db.from_sequence(df['date_posted'])
 
@@ -142,7 +144,10 @@ def build_index(in_dir, out_dict, out_postings):
             for key in dictionary:
                 #list of tuples instead of list of list of tuples
                 temp_postings[key].append(dictionary[key][0])
-            dictionary.clear()  
+                
+            dictionary.clear() 
+
+        # print(temp_postings['damag'])
 
         for dictionary in token_counter_list2:
             for key in dictionary:
